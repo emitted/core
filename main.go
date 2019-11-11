@@ -26,6 +26,8 @@ var (
 
 func main() {
 
+        hub.Run()
+
 	mux := pat.New()
 
 	mux.Get("/ws/:secret", http.HandlerFunc(handleConnections))
