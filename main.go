@@ -9,8 +9,8 @@ import (
 	"github.com/bmizerany/pat"
 	"github.com/gorilla/websocket"
 
-	h "github.com/sireax/emitted/internal/hub"
-	p "github.com/sireax/emitted/internal/packet"
+	h "github.com/sireax/Emmet-Go-Server/internal/hub"
+	p "github.com/sireax/Emmet-Go-Server/internal/packet"
 )
 
 var (
@@ -54,12 +54,15 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("A client subscribed to:", secret)
 
 	ws, _ := upgrader.Upgrade(w, r, nil)
-	defer ws.Close()
+	defer func() {
+		tunnel.DisconnectSubscriber(ws)
+		ws.Close()
+	}()
 
 	// connecting subscriber to tunnel
 	tunnel.ConnectSubscriber(ws)
-
-	defer tunnel.DisconnectSubscriber(ws)
+	data, _ := json.Marshal(`Authentication succeded`)
+	ws.WriteJSON(p.NewPacket("auth_succeded", data))
 
 	for {
 		var packet *p.Packet

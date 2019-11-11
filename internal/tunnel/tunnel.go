@@ -1,15 +1,11 @@
 package tunnel
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"log"
 	"sync"
 
 	"github.com/gorilla/websocket"
-	broker "github.com/sireax/emitted/internal/broker"
-	p "github.com/sireax/emitted/internal/packet"
+	broker "github.com/sireax/Emmet-Go-Server/internal/broker"
 )
 
 var br = broker.NewBroker()
@@ -20,7 +16,6 @@ type Tunnel struct {
 	APIkey         string
 	Key            string `json:"seckey"`
 	Subscribers    map[*websocket.Conn]bool
-	Broadcast      chan *p.Packet
 	Connected      int
 	MaxConnections int
 	Mux            sync.Mutex
@@ -32,11 +27,9 @@ func NewTunnel(APIKey string, key string, maxConnections int) *Tunnel {
 		APIkey:         APIKey,
 		Key:            key,
 		Subscribers:    make(map[*websocket.Conn]bool),
-		Broadcast:      make(chan *p.Packet),
 		Connected:      0,
 		MaxConnections: maxConnections,
 	}
-	go tunnel.Run(br)
 	return tunnel
 }
 
@@ -62,9 +55,6 @@ func (t *Tunnel) ConnectSubscriber(client *websocket.Conn) {
 	t.Subscribers[client] = true
 	t.Connected++
 	t.Mux.Unlock()
-
-	data, _ := json.Marshal(`Authentication succeded`)
-	client.WriteJSON(p.NewPacket("auth_succeded", data))
 }
 
 // DisconnectSubscriber ...
@@ -78,45 +68,4 @@ func (t *Tunnel) DisconnectSubscriber(client *websocket.Conn) {
 // SubscribersConnected method counts concurrent connections
 func (t *Tunnel) SubscribersConnected() int {
 	return t.Connected
-}
-
-// ListenBroker function starts to listen Broker for messages
-func (t *Tunnel) ListenBroker(b *broker.Broker) {
-	sub := b.Redis.Subscribe(t.Key)
-	for {
-		select {
-		case packet := <-sub.Channel():
-			var message *p.Packet
-			messageRaw := packet.Payload
-			err := json.Unmarshal([]byte(messageRaw), &message)
-			if err != nil {
-				fmt.Println(err)
-				break
-			}
-			t.Broadcast <- message
-		}
-	}
-}
-
-// BroadcastMessages ...
-func (t *Tunnel) BroadcastMessages() {
-	for {
-		select {
-		case packet := <-t.Broadcast:
-			for client := range t.Subscribers {
-				err := client.WriteJSON(packet)
-				if err != nil {
-					log.Printf("error: %v", err)
-					client.Close()
-
-				}
-			}
-		}
-	}
-}
-
-// Run ...
-func (t *Tunnel) Run(b *broker.Broker) {
-	go t.ListenBroker(b)
-	go t.BroadcastMessages()
 }
