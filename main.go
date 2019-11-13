@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	hub = h.NewHub() // hub variable
-
+	// hub variable
+	hub = h.NewHub()
 	// upgrader
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -26,7 +26,7 @@ var (
 
 func main() {
 
-        hub.Run()
+	go hub.Run()
 
 	mux := pat.New()
 
@@ -47,7 +47,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	secret := params.Get(":secret")
 
 	// Checking tunnel's existance
-	tunnel, err := hub.GetOrCreateTunnel(secret)
+	tunnel, err := hub.GetTunnel(secret)
 	if err != nil {
 		w.WriteHeader(http.StatusForbidden)
 		return

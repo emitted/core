@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -35,12 +36,14 @@ func NewTunnel(APIKey string, key string, maxConnections int) *Tunnel {
 
 // GetIfExists ...
 func GetIfExists(key string) (*Tunnel, error) {
-	results, _ := br.Redis.SInter("tunnels:maps:" + key).Result()
-	if len(results) == 0 {
+	results, _ := br.Redis.Get("tunnels:maps:" + key).Result()
+	fmt.Println(results)
+	if results == "" {
 		return nil, errors.New("tunnel does not exist")
 	}
 
-	model, _ := br.Redis.HVals("tunnels:" + results[0]).Result()
+	model, _ := br.Redis.HVals("tunnels:" + results).Result()
+	fmt.Println(model)
 	if len(model) == 0 {
 		return nil, errors.New("tunnel does not exist")
 	}
