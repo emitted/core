@@ -8,6 +8,7 @@ import (
 
 	"github.com/bmizerany/pat"
 	"github.com/gorilla/websocket"
+	. "github.com/logrusorgru/aurora"
 
 	h "github.com/sireax/Emmet-Go-Server/internal/hub"
 	p "github.com/sireax/Emmet-Go-Server/internal/packet"
@@ -34,7 +35,7 @@ func main() {
 
 	http.Handle("/", mux)
 
-	log.Println("http server started on :8000")
+	log.Println(Green("http server started on :8000"))
 	err := http.ListenAndServe("localhost:8000", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
