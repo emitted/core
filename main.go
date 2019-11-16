@@ -9,14 +9,18 @@ import (
 	"github.com/bmizerany/pat"
 	"github.com/gorilla/websocket"
 	. "github.com/logrusorgru/aurora"
+	errs "github.com/sireax/Emmet-Go-Server/internal/errors"
 
-	h "github.com/sireax/Emmet-Go-Server/internal/hub"
+	Hub "github.com/sireax/Emmet-Go-Server/internal/hub"
 	p "github.com/sireax/Emmet-Go-Server/internal/packet"
+	Pool "github.com/sireax/Emmet-Go-Server/internal/pool"
 )
 
 var (
-	// hub variable
-	hub = h.NewHub()
+	// creating an instance of Hub - storage for tunnels
+	hub = Hub.NewHub()
+	// creating an instace of Pool that keeps workers
+	pool = Pool.NewPool(hub, 15)
 	// upgrader
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -27,15 +31,14 @@ var (
 
 func main() {
 
-	go hub.Run()
+	pool.Run()
 
 	mux := pat.New()
 
-	mux.Get("/ws/:secret", http.HandlerFunc(handleConnections))
+	mux.Get("/ws/:key", http.HandlerFunc(handleConnections))
 
 	http.Handle("/", mux)
 
-	log.Println(Green("http server started on :8000"))
 	err := http.ListenAndServe("localhost:8000", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
@@ -45,16 +48,27 @@ func main() {
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	params := r.URL.Query()
-	secret := params.Get(":secret")
+	key := params.Get(":key")
 
 	// Checking tunnel's existance
-	tunnel, err := hub.GetTunnel(secret)
+	tunnel, err := hub.GetTunnel(key)
 	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
+		switch err.(type) {
+
+		case *errs.ErrTunnelNotFound:
+			w.WriteHeader(http.StatusForbidden)
+
+		case *errs.ErrConnLimitReached:
+			w.WriteHeader(http.StatusUnauthorized)
+
+		case *errs.ErrMessagesLimitReached:
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+
 		return
 	}
 
-	fmt.Println("A client subscribed to:", secret)
+	log.Println(Green("A client subscribed to:"), Bold(Cyan(key)))
 
 	ws, _ := upgrader.Upgrade(w, r, nil)
 	defer func() {
