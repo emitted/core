@@ -33,7 +33,7 @@ type Config struct {
 func GetConfig() *Config {
 	_, dirname, _, _ := runtime.Caller(0)
 
-	filepath := filepath.Dir(dirname) + "/config.yml"
+	filepath := filepath.Dir(dirname) + "/../config.yml"
 	filepath = strings.Replace(filepath, "/", "\\", -1)
 
 	f, err := os.Open(filepath)
