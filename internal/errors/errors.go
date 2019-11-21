@@ -6,9 +6,9 @@ type ErrTunnelNotFound struct {
 }
 
 // NewErrTunnelNotFound ...
-func NewErrTunnelNotFound(message string) *ErrTunnelNotFound {
+func NewErrTunnelNotFound() *ErrTunnelNotFound {
 	return &ErrTunnelNotFound{
-		message: message,
+		message: "tunnel is not found",
 	}
 }
 
@@ -22,9 +22,9 @@ type ErrConnLimitReached struct {
 }
 
 // NewErrConnLimitReached ...
-func NewErrConnLimitReached(message string) *ErrConnLimitReached {
+func NewErrConnLimitReached() *ErrConnLimitReached {
 	return &ErrConnLimitReached{
-		message: message,
+		message: "tunnel connections limit reached",
 	}
 }
 
@@ -38,9 +38,9 @@ type ErrMessagesLimitReached struct {
 }
 
 // NewErrMessagesLimitReached ...
-func NewErrMessagesLimitReached(message string) *ErrMessagesLimitReached {
+func NewErrMessagesLimitReached() *ErrMessagesLimitReached {
 	return &ErrMessagesLimitReached{
-		message: message,
+		message: "tunnel messages limit reached",
 	}
 }
 

@@ -1,8 +1,6 @@
 package hub
 
 import (
-	"errors"
-
 	errs "github.com/sireax/Emmet-Go-Server/internal/errors"
 	t "github.com/sireax/Emmet-Go-Server/internal/tunnel"
 )
@@ -24,7 +22,7 @@ func NewHub() *Hub {
 func (hub *Hub) FindTunnel(key string) (*t.Tunnel, error) {
 	tunnel, ok := hub.Tunnels[key]
 	if ok != true {
-		return nil, errors.New("tunnel does not exist")
+		return nil, errs.NewErrTunnelNotFound()
 	}
 
 	return tunnel, nil
@@ -48,7 +46,7 @@ func (hub *Hub) GetTunnel(key string) (*t.Tunnel, error) {
 	// looking for tunnel in database
 	tunnel, err = t.GetIfExists(key)
 	if err != nil {
-		return nil, errs.NewErrTunnelNotFound("tunnel is not found")
+		return nil, errs.NewErrTunnelNotFound()
 	}
 
 	hub.SetTunnel(key, tunnel)
