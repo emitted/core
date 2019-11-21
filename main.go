@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 
@@ -11,6 +10,7 @@ import (
 	. "github.com/logrusorgru/aurora"
 	errs "github.com/sireax/Emmet-Go-Server/internal/errors"
 
+	Config "github.com/sireax/Emmet-Go-Server/config"
 	Hub "github.com/sireax/Emmet-Go-Server/internal/hub"
 	p "github.com/sireax/Emmet-Go-Server/internal/packet"
 	Pool "github.com/sireax/Emmet-Go-Server/internal/pool"
@@ -27,6 +27,8 @@ var (
 			return true
 		},
 	}
+
+	config = Config.GetConfig()
 )
 
 func main() {
@@ -39,7 +41,7 @@ func main() {
 
 	http.Handle("/", mux)
 
-	err := http.ListenAndServe("localhost:8000", nil)
+	err := http.ListenAndServe(config.Server.Host+":"+config.Server.Port, nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
@@ -87,9 +89,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		err := ws.ReadJSON(&packet)
 
 		if err != nil {
-			val, _ := json.Marshal(err)
-			ws.WriteJSON(p.NewPacket("error", val))
-			fmt.Println("invalid packet structure")
+			ws.WriteJSON(p.NewPacket("error", []byte(err.Error())))
 			return
 		}
 

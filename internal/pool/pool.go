@@ -2,12 +2,18 @@ package pool
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 
 	"github.com/go-redis/redis"
 	. "github.com/logrusorgru/aurora"
+	c "github.com/sireax/Emmet-Go-Server/config"
 	h "github.com/sireax/Emmet-Go-Server/internal/hub"
 	p "github.com/sireax/Emmet-Go-Server/internal/packet"
+)
+
+var (
+	config = c.GetConfig()
 )
 
 // Pool ...
@@ -20,8 +26,10 @@ type Pool struct {
 // NewPool ...
 func NewPool(hub *h.Hub, workers int) *Pool {
 	return &Pool{
-		Hub:          hub,
-		Redis:        redis.NewClient(&redis.Options{}),
+		Hub: hub,
+		Redis: redis.NewClient(&redis.Options{
+			Addr: config.Redis.Host + ":" + config.Redis.Port,
+		}),
 		WorkersCount: workers,
 	}
 }
@@ -54,6 +62,7 @@ func (pool *Pool) worker(flow <-chan *redis.Message) {
 			if err != nil {
 				continue
 			}
+			fmt.Printf("%+v", message)
 
 			// Getting tunnel from Hub's map
 			tunnel, err := pool.Hub.FindTunnel(message.Tunnel)
