@@ -1,44 +1,32 @@
-package pool
+package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 
 	"github.com/go-redis/redis"
 	. "github.com/logrusorgru/aurora"
-	c "github.com/sireax/Emmet-Go-Server/config"
-	h "github.com/sireax/Emmet-Go-Server/internal/hub"
 	p "github.com/sireax/Emmet-Go-Server/internal/packet"
-)
-
-var (
-	config = c.GetConfig()
 )
 
 // Pool ...
 type Pool struct {
-	Hub          *h.Hub
-	Redis        *redis.Client
+	Hub          *Hub
 	WorkersCount int
 }
 
 // NewPool ...
-func NewPool(hub *h.Hub, workers int) *Pool {
+func NewPool(workers int) *Pool {
 	return &Pool{
-		Hub: hub,
-		Redis: redis.NewClient(&redis.Options{
-			Addr: config.Redis.Host + ":" + config.Redis.Port,
-		}),
 		WorkersCount: workers,
 	}
 }
 
 // Run ...
 func (pool *Pool) Run() {
-	flow := pool.Redis.Subscribe("messages").Channel()
+	flow := broker.Redis.Subscribe("messages").Channel()
 	for i := 0; i < pool.WorkersCount; i++ {
-		log.Println(Green("worker"), i, Green("is running"))
+		log.Println(Green("worker"), i, Green("is up and running"))
 		go pool.worker(flow)
 	}
 
@@ -58,14 +46,14 @@ func (pool *Pool) worker(flow <-chan *redis.Message) {
 			// Trying to read message from pub/sub broker
 			var message *RedisMessage
 			messageRaw := data.Payload
+
 			err := json.Unmarshal([]byte(messageRaw), &message)
 			if err != nil {
 				continue
 			}
-			fmt.Printf("%+v", message)
 
 			// Getting tunnel from Hub's map
-			tunnel, err := pool.Hub.FindTunnel(message.Tunnel)
+			tunnel, err := hub.FindTunnel(message.Tunnel)
 			if err != nil {
 				continue
 			}
@@ -78,8 +66,8 @@ func (pool *Pool) worker(flow <-chan *redis.Message) {
 			}
 
 			// Broadcasting message
-			for subscriber := range tunnel.Subscribers {
-				subscriber.WriteJSON(packet)
+			for client := range tunnel.Clients {
+				client.SendMessage(packet)
 			}
 		}
 	}

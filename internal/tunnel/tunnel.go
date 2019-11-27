@@ -1,22 +1,17 @@
 package tunnel
 
 import (
-	"log"
 	"sync"
 
-	"github.com/gorilla/websocket"
-	broker "github.com/sireax/Emmet-Go-Server/internal/broker"
-	errs "github.com/sireax/Emmet-Go-Server/internal/errors"
+	c "github.com/sireax/Emmet-Go-Server/internal/client"
 )
-
-var br = broker.NewBroker()
 
 // Tunnel structure represents an instance
 // of the channel, that clientis connected to.
 type Tunnel struct {
 	APIkey         string
 	Key            string `json:"seckey"`
-	Subscribers    map[*websocket.Conn]bool
+	Clients        map[*c.Client]bool
 	Connected      int
 	MaxConnections int
 	Mux            sync.Mutex
@@ -27,47 +22,32 @@ func NewTunnel(APIKey string, key string, maxConnections int) *Tunnel {
 	tunnel := &Tunnel{
 		APIkey:         APIKey,
 		Key:            key,
-		Subscribers:    make(map[*websocket.Conn]bool),
+		Clients:        make(map[*c.Client]bool),
 		Connected:      0,
 		MaxConnections: maxConnections,
 	}
 	return tunnel
 }
 
-// GetIfExists ...
-func GetIfExists(key string) (*Tunnel, error) {
-	results, _ := br.Redis.Get("tunnels:maps:" + key).Result()
-	if results == "" {
-		return nil, errs.NewErrTunnelNotFound()
-	}
-
-	model, _ := br.Redis.HVals("tunnels:" + results).Result()
-	if len(model) == 0 {
-		return nil, errs.NewErrTunnelNotFound()
-	}
-
-	tunnel := NewTunnel(model[0], model[1], 100)
-	return tunnel, nil
-}
-
-// ConnectSubscriber ...
-func (t *Tunnel) ConnectSubscriber(client *websocket.Conn) {
+// ConnectClient ...
+func (t *Tunnel) ConnectClient(client *c.Client) {
 	t.Mux.Lock()
-	t.Subscribers[client] = true
+	t.Clients[client] = true
 	t.Connected++
 	t.Mux.Unlock()
+
+	client.SendAuthMessage()
 }
 
-// DisconnectSubscriber ...
-func (t *Tunnel) DisconnectSubscriber(client *websocket.Conn) {
+// DisconnectClient ...
+func (t *Tunnel) DisconnectClient(client *c.Client) {
 	t.Mux.Lock()
-	delete(t.Subscribers, client)
+	delete(t.Clients, client)
 	t.Connected--
 	t.Mux.Unlock()
-	log.Println("client disconnected")
 }
 
-// SubscribersConnected method counts concurrent connections
-func (t *Tunnel) SubscribersConnected() int {
+// ClientsConnected method counts concurrent connections
+func (t *Tunnel) ClientsConnected() int {
 	return t.Connected
 }

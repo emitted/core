@@ -1,6 +1,8 @@
 server:
   host: "localhost"
   port: "8000"
+  workers: 10
 redis:
   host: "localhost"
   port: "6379"
+  workers: 10

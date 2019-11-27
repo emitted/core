@@ -1,4 +1,4 @@
-package hub
+package main
 
 import (
 	errs "github.com/sireax/Emmet-Go-Server/internal/errors"
@@ -44,7 +44,7 @@ func (hub *Hub) GetTunnel(key string) (*t.Tunnel, error) {
 	}
 
 	// looking for tunnel in database
-	tunnel, err = t.GetIfExists(key)
+	tunnel, err = broker.FindTunnel(key)
 	if err != nil {
 		return nil, errs.NewErrTunnelNotFound()
 	}

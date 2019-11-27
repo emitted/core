@@ -1,4 +1,4 @@
-package config
+package main
 
 import (
 	"log"
@@ -19,13 +19,17 @@ type Service struct {
 // Config ...
 type Config struct {
 	Server struct {
-		Host string `yaml:"host"`
-		Port string `yaml:"port"`
+		Host    string `yaml:"host"`
+		Port    string `yaml:"port"`
+		Workers int    `yaml:"workers"`
 	} `yaml:"server"`
+
 	Redis struct {
-		Host string `yaml:"host"`
-		Port string `yaml:"port"`
+		Host    string `yaml:"host"`
+		Port    string `yaml:"port"`
+		Workers int    `yaml:"workers"`
 	} `yaml:"redis"`
+
 	Services map[string]Service `yaml:"services"`
 }
 
@@ -33,7 +37,7 @@ type Config struct {
 func GetConfig() *Config {
 	_, dirname, _, _ := runtime.Caller(0)
 
-	filepath := filepath.Dir(dirname) + "/../config.yml"
+	filepath := filepath.Dir(dirname) + "/config.yml"
 	filepath = strings.Replace(filepath, "/", "\\", -1)
 
 	f, err := os.Open(filepath)
