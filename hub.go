@@ -1,55 +1,49 @@
 package main
 
-import (
-	errs "github.com/sireax/Emmet-Go-Server/internal/errors"
-	t "github.com/sireax/Emmet-Go-Server/internal/tunnel"
-)
+import "log"
 
 // Hub struct contains all data and structs of clients,tunnels etc.
 type Hub struct {
-	Tunnels map[string]*t.Tunnel // tunnels map
+	Subs    map[string]*Tunnel // tunnels map
+	Clients map[uint32]*Client
 }
 
 // NewHub is a constructor method for the Hub struct
 func NewHub() *Hub {
 	return &Hub{
-
-		Tunnels: make(map[string]*t.Tunnel),
+		Subs:    make(map[string]*Tunnel, 0),
+		Clients: make(map[uint32]*Client, 0),
 	}
 }
 
-// FindTunnel ...
-func (hub *Hub) FindTunnel(key string) (*t.Tunnel, error) {
-	tunnel, ok := hub.Tunnels[key]
-	if ok != true {
-		return nil, errs.NewErrTunnelNotFound()
+// AddSub ...
+func (hub *Hub) AddSub(tunnel *Tunnel) (bool, error) {
+	_, ok := hub.Subs[tunnel.Key]
+	if !ok {
+		hub.Subs[tunnel.Key] = tunnel
 	}
 
-	return tunnel, nil
+	if !ok {
+		return true, nil
+	}
+	return false, nil
 }
 
-// SetTunnel ...
-func (hub *Hub) SetTunnel(key string, tunnel *t.Tunnel) {
-	hub.Tunnels[key] = tunnel
+// BroadcastMessage ...
+func (hub *Hub) BroadcastMessage(tunnel string, publication Publication) {
+	for _, client := range hub.Subs[tunnel].Clients {
+		packet, _ := publication.ToPacket()
+		client.MessageWriter.enqueue(packet.Encode())
+		log.Println(packet.Encode())
+	}
 }
 
-// GetTunnel primarily searchs tunnel in map by key,
-// if it does not exist it looks for it in redis
-func (hub *Hub) GetTunnel(key string) (*t.Tunnel, error) {
-
-	// Looking for tunnel in map
-	tunnel, err := hub.FindTunnel(key)
-	if err == nil {
-		return tunnel, nil
+// Tunnels ...
+func (hub *Hub) Tunnels() []string {
+	tunnels := make([]string, 0)
+	for t := range hub.Subs {
+		tunnels = append(tunnels, t)
 	}
 
-	// looking for tunnel in database
-	tunnel, err = broker.FindTunnel(key)
-	if err != nil {
-		return nil, errs.NewErrTunnelNotFound()
-	}
-
-	hub.SetTunnel(key, tunnel)
-
-	return tunnel, nil
+	return tunnels
 }

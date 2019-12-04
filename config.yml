@@ -1,8 +1,15 @@
+# HTTP server configuration
 server:
   host: "localhost"
   port: "8000"
   workers: 10
-redis:
+
+# PUB/SUB broker configuration
+broker:
   host: "localhost"
   port: "6379"
+  db: 0
   workers: 10
+  read_timeout: 1
+  write_timeout: 1
+  connect_timeout: 10

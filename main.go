@@ -6,10 +6,6 @@ import (
 
 	"github.com/bmizerany/pat"
 	"github.com/gorilla/websocket"
-	. "github.com/logrusorgru/aurora"
-	errs "github.com/sireax/Emmet-Go-Server/internal/errors"
-
-	c "github.com/sireax/Emmet-Go-Server/internal/client"
 )
 
 var (
@@ -29,7 +25,7 @@ var (
 
 func main() {
 
-	broker.Run()
+	go broker.Run()
 
 	mux := pat.New()
 
@@ -47,39 +43,31 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	params := r.URL.Query()
 	key := params.Get(":key")
+	log.Println(key)
 
 	// Checking tunnel's existance
-	tunnel, err := hub.GetTunnel(key)
-	if err != nil {
-		switch err.(type) {
-
-		case *errs.ErrTunnelNotFound:
-			w.WriteHeader(http.StatusEarlyHints)
-
-		case *errs.ErrConnLimitReached:
-			w.WriteHeader(http.StatusUnauthorized)
-
-		case *errs.ErrMessagesLimitReached:
-			w.WriteHeader(http.StatusUnauthorized)
-		}
-
-		return
+	tunnel := &Tunnel{
+		Key:       "PLSB987JB6",
+		Clients:   make(map[uint32]*Client),
+		Connected: 0,
 	}
 
-	log.Println(Green("A client subscribed to:"), Bold(Cyan(key)))
-
 	conn, _ := upgrader.Upgrade(w, r, nil)
-	client := c.NewClient(conn)
+
+	client := NewClient(conn, tunnel)
+	client.Connect(tunnel)
 
 	defer func() {
-		tunnel.DisconnectClient(client)
-		conn.Close()
+		client.Terminate()
 	}()
 
 	// connecting subscriber to tunnel
-	tunnel.ConnectClient(client)
 
 	for {
-
+		// type Message struct {
+		// 	Message []byte
+		// }
+		// var message *Message
+		// conn.ReadJSON(message)
 	}
 }

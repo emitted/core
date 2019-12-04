@@ -18,19 +18,29 @@ type Service struct {
 
 // Config ...
 type Config struct {
-	Server struct {
-		Host    string `yaml:"host"`
-		Port    string `yaml:"port"`
-		Workers int    `yaml:"workers"`
-	} `yaml:"server"`
+	Server *ServerConfig `yaml:"server"`
 
-	Redis struct {
-		Host    string `yaml:"host"`
-		Port    string `yaml:"port"`
-		Workers int    `yaml:"workers"`
-	} `yaml:"redis"`
+	Broker *BrokerConfig `yaml:"broker"`
 
 	Services map[string]Service `yaml:"services"`
+}
+
+// BrokerConfig ...
+type BrokerConfig struct {
+	Host           string `yaml:"host"`
+	Port           string `yaml:"port"`
+	DB             int    `yaml:"db"`
+	PubSubWorkers  int    `yaml:"workers"`
+	ReadTimeout    uint8  `yaml:"read_timeout"`
+	WriteTimeout   uint8  `yaml:"write_timeout"`
+	ConnectTimeout uint8  `yaml:"connect_timeout"`
+}
+
+// ServerConfig ...
+type ServerConfig struct {
+	Host    string `yaml:"host"`
+	Port    string `yaml:"port"`
+	Workers int    `yaml:"workers"`
 }
 
 // GetConfig ...
