@@ -1,7 +1,5 @@
 package main
 
-import "log"
-
 // Hub struct contains all data and structs of clients,tunnels etc.
 type Hub struct {
 	Subs    map[string]*Tunnel // tunnels map
@@ -34,7 +32,6 @@ func (hub *Hub) BroadcastMessage(tunnel string, publication Publication) {
 	for _, client := range hub.Subs[tunnel].Clients {
 		packet, _ := publication.ToPacket()
 		client.MessageWriter.enqueue(packet.Encode())
-		log.Println(packet.Encode())
 	}
 }
 

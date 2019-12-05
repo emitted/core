@@ -17,7 +17,6 @@ type Client struct {
 	Authenticated bool
 	Subs          map[string]*Tunnel
 	Stream        chan *Packet
-	Closed        chan struct{}
 	MessageWriter *writer
 }
 
@@ -30,7 +29,6 @@ func NewClient(conn *websocket.Conn, tunnel *Tunnel) *Client {
 		Authenticated: true,
 		Subs:          make(map[string]*Tunnel),
 		Stream:        make(chan *Packet),
-		Closed:        make(chan struct{}, 1),
 	}
 
 	// Creating message writer config
@@ -49,7 +47,6 @@ func NewClient(conn *websocket.Conn, tunnel *Tunnel) *Client {
 
 	// Setting client's message writer
 	client.MessageWriter = newWriter(messageWriterConf)
-	log.Println(client.MessageWriter)
 
 	return client
 }
@@ -68,13 +65,22 @@ func (c *Client) Connect(tunnel *Tunnel) {
 
 	if first {
 		broker.Subscribe([]string{tunnel.Key})
-		err = broker.redis.Ping("ping")
-		if err != nil {
-			log.Fatal(err)
-		}
 	}
 
 	c.WriteAuthPacket()
+}
+
+// Disconnect ...
+func (c *Client) Disconnect() {
+	var toDelete []string
+	for _, tunnel := range c.Subs {
+		delete(tunnel.Clients, c.uid)
+		if tunnel.ClientsConnected() == 0 {
+			delete(hub.Subs, tunnel.Key)
+			toDelete = append(toDelete, tunnel.Key)
+		}
+	}
+	broker.Unsubscribe(toDelete)
 }
 
 // Tunnels ...
@@ -89,18 +95,18 @@ func (c *Client) Tunnels() []string {
 
 // Terminate function deletes all records about client and destroys connection.
 func (c *Client) Terminate() {
-	c.Conn.Close()
-	close(c.Closed)
-	broker.Unsubscribe(c.Tunnels())
+	log.Println("Terminate function called")
+	c.Disconnect()
 	c.MessageWriter.close()
 	delete(hub.Clients, c.uid)
+	c.Conn.Close()
 }
 
 // Write ...
 func (c *Client) Write(data []byte) {
 	err := c.Conn.WriteMessage(websocket.TextMessage, data)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error while writing message to client: ", err)
 	}
 }
 
@@ -108,7 +114,7 @@ func (c *Client) Write(data []byte) {
 func (c *Client) WriteAuthPacket() {
 	packet := &Packet{
 		Event: "message",
-		Data:  []byte("Authentication succeded"),
+		Data:  "Authentication succeded",
 	}
 
 	c.MessageWriter.enqueue(packet.Encode())

@@ -25,7 +25,7 @@ var (
 
 func main() {
 
-	go broker.Run()
+	broker.Run()
 
 	mux := pat.New()
 
@@ -54,20 +54,20 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	conn, _ := upgrader.Upgrade(w, r, nil)
 
-	client := NewClient(conn, tunnel)
-	client.Connect(tunnel)
+	go func() {
+		client := NewClient(conn, tunnel)
+		client.Connect(tunnel)
 
-	defer func() {
-		client.Terminate()
+		defer func() {
+			client.Terminate()
+		}()
+
+		for {
+			_, data, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			log.Println(data)
+		}
 	}()
-
-	// connecting subscriber to tunnel
-
-	for {
-		// type Message struct {
-		// 	Message []byte
-		// }
-		// var message *Message
-		// conn.ReadJSON(message)
-	}
 }

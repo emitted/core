@@ -9,28 +9,84 @@ import (
 
 // Broker structure represents message broker, connected with API
 type Broker struct {
-	redis  *redis.PubSubConn
-	Config *BrokerConfig
-	subCh  chan *subRequest
+	pool     *redis.Pool
+	Config   *BrokerConfig
+	subCh    chan *subRequest
+	messages chan redis.Message
 }
 
 // NewBroker function initializes Message Broker
 func NewBroker() *Broker {
 	return &Broker{
-		Config: config.Broker,
+		Config:   config.Broker,
+		subCh:    make(chan *subRequest, 0),
+		messages: make(chan redis.Message, 0),
 	}
 }
 
-// Run broker node
+// Run ...
 func (b *Broker) Run() {
-	conn, err := redis.Dial("tcp", b.Config.Host+":"+b.Config.Port)
-	if err != nil {
-		log.Fatal(err)
+
+	b.pool = &redis.Pool{
+		MaxIdle:   80,
+		MaxActive: 12000, // max number of connections
+		Wait:      true,
+		Dial: func() (redis.Conn, error) {
+			conn, err := redis.Dial("tcp", b.Config.Host+":"+b.Config.Port)
+			if err != nil {
+				log.Fatalln("error while initializing redis pub/sub connection: ", err)
+			}
+
+			return conn, nil
+		},
 	}
+
+	go b.runPublishPipeline()
+
+	time.Sleep(time.Second)
+
+	go b.runPubSub()
+}
+
+func (b *Broker) runPublishPipeline() {
+
+	pingTicker := time.NewTicker(time.Second)
+	defer pingTicker.Stop()
+
+	for {
+		select {
+		case <-pingTicker.C:
+			conn := b.pool.Get()
+			err := conn.Send("PUBLISH", "PING_TEST_CHANNEL", nil)
+			if err != nil {
+				log.Fatal(err)
+				conn.Close()
+				return
+			}
+			conn.Close()
+		}
+	}
+
+}
+
+// ChannelID ...
+func ChannelID(key string) string {
+	switch key {
+	case "PING_TEST_CHANNEL":
+		return "ping"
+	default:
+		return key
+	}
+}
+
+func (b *Broker) runPubSub() {
+	conn := b.pool.Get()
+
 	psc := &redis.PubSubConn{
 		Conn: conn,
 	}
-	b.redis = psc
+
+	psc.Subscribe("PING_TEST_CHANNEL")
 
 	// these workers will add new subscriptions
 	go func() {
@@ -39,13 +95,17 @@ func (b *Broker) Run() {
 			case r := <-b.subCh:
 				if r.subscribe == true {
 					for _, tunnel := range r.tunnels {
-						psc.Subscribe(tunnel)
-						log.Println("Subscribed to", tunnel)
+						err := psc.Subscribe(tunnel)
+						if err != nil {
+							log.Fatal("error while subscribing to channel: ", err)
+						}
 					}
 				} else {
 					for _, tunnel := range r.tunnels {
-						psc.Unsubscribe(tunnel)
-						log.Println("Unsubscribed from", tunnel)
+						err := psc.Unsubscribe(tunnel)
+						if err != nil {
+							log.Fatal("error while unsubscribing from channel: ", err)
+						}
 					}
 				}
 			}
@@ -53,21 +113,23 @@ func (b *Broker) Run() {
 	}()
 
 	// these workers will broadcast new messages
-	stream := make(chan redis.Message)
 	for i := 0; i < b.Config.PubSubWorkers; i++ {
 		log.Println("worker", i, "is up and running")
 		go func() {
 			for {
 				select {
-				case message := <-stream:
-					tunnel := message.Channel
+				case message := <-b.messages:
+					switch ChannelID(message.Channel) {
+					case "ping":
+					default:
+						tunnel := message.Channel
 
-					var publication Publication
-					publication.Tunnel = message.Channel
-					publication.Unmarshal(message.Data)
-					log.Println(publication)
+						var publication Publication
+						publication.Tunnel = message.Channel
+						publication.Data = message.Data
 
-					hub.BroadcastMessage(tunnel, publication)
+						hub.BroadcastMessage(tunnel, publication)
+					}
 				}
 			}
 		}()
@@ -80,9 +142,6 @@ func (b *Broker) Run() {
 		if len(tunnels) > 0 {
 			sub := newSubRequest(tunnels, true)
 			b.sendSubRequest(sub)
-			if err != nil {
-				log.Fatal(err)
-			}
 		}
 
 	}()
@@ -92,7 +151,9 @@ func (b *Broker) Run() {
 		for {
 			switch m := psc.ReceiveWithTimeout(10 * time.Second).(type) {
 			case redis.Message:
-				stream <- m
+				b.messages <- m
+			case redis.Subscription:
+				log.Println("New subscription: ", m.Channel)
 			}
 		}
 	}()
@@ -118,9 +179,8 @@ type subRequest struct {
 }
 
 func (b *Broker) sendSubRequest(sub *subRequest) {
-	go func() {
-		b.subCh <- sub
-	}()
+	b.subCh <- sub
+	return
 }
 
 // NewSubRequest ...

@@ -2,17 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 )
 
 // Packet structure represents an instance
 // of a data, that client sends and recieves.
 type Packet struct {
 	Event string `json:"event"`
-	Data  []byte `json:"data"`
+	Data  string `json:"data"`
 }
 
 // NewPacket creates a packet instance
-func NewPacket(event string, data []byte) *Packet {
+func NewPacket(event string, data string) *Packet {
 	return &Packet{
 		Event: event,
 		Data:  data,
@@ -33,13 +34,21 @@ type Publication struct {
 
 // ToPacket ...
 func (p Publication) ToPacket() (*Packet, error) {
-	var packet Packet
-	err := json.Unmarshal([]byte(p.Data), &packet)
+	var packet *Packet
+
+	pData, err := p.Data.MarshalJSON()
 	if err != nil {
-		return nil, err
+		log.Fatalln("err marshaling publication to packet: ", err)
 	}
 
-	return &packet, nil
+	data := string(pData)
+
+	packet = &Packet{
+		Event: "message",
+		Data:  data,
+	}
+
+	return packet, nil
 }
 
 // Unmarshal ...

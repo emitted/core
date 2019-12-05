@@ -28,18 +28,27 @@ func newWriter(config writerConfig) *writer {
 	}
 
 	go w.runWriteRoutine()
+
+	log.Println("Writer routine started")
 	return w
 }
 
 func (w *writer) runWriteRoutine() {
+
 	for {
+		if w.closed {
+			return
+		}
 		msg, ok := w.messages.Wait()
 		if !ok {
-			if w.messages.Closed() {
+			if w.messages.Closed() || w.closed {
+				log.Println("Routine closed")
 				return
 			}
 			continue
 		}
+
+		var writeErr error
 
 		messageCount := w.messages.Len()
 		if messageCount > 0 {
@@ -71,6 +80,14 @@ func (w *writer) runWriteRoutine() {
 				}
 				w.mu.Unlock()
 			}
+		} else {
+			w.mu.Lock()
+			writeErr = w.config.WriteFn(msg)
+			w.mu.Unlock()
+		}
+		if writeErr != nil {
+			// Write failed, transport must close itself, here we just return from routine.
+			return
 		}
 	}
 }
@@ -85,6 +102,7 @@ func (w *writer) close() error {
 		w.mu.Unlock()
 		return nil
 	}
+	close(w.done)
 	w.closed = true
 	w.mu.Unlock()
 
