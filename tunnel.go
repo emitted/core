@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"sync"
 )
 
@@ -32,6 +33,20 @@ func NewTunnel(APIKey string, key string, options *TunnelOptions) *Tunnel {
 		Options:   options,
 	}
 	return tunnel
+}
+
+// FindOrCreateTunnel ...
+func FindOrCreateTunnel(key string) *Tunnel {
+	// TODO: THIS FUNCTION IS NOT WORKING
+	// TODO: DO NOT USE
+	t, _ := hub.Subs[key]
+
+	_, err := hub.AddSub(t)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return t
 }
 
 // ClientsConnected method counts concurrent connections

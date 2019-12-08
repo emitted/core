@@ -153,7 +153,6 @@ func (b *Broker) runPubSub() {
 			case redis.Message:
 				b.messages <- m
 			case redis.Subscription:
-				log.Println("New subscription: ", m.Channel)
 			}
 		}
 	}()

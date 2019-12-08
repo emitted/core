@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/bmizerany/pat"
 	"github.com/gorilla/websocket"
@@ -21,6 +22,23 @@ var (
 			return true
 		},
 	}
+	// wsHandler is used to handle ws connections
+	wsHandler = &WebsocketHandler{
+		config: WebsocketConfig{
+			MessageSizeLimit: 100,
+			PingInterval:     time.Second * 5,
+		},
+	}
+
+	tunnel = &Tunnel{
+		Key:       "PLSB987JB6",
+		Clients:   make(map[uint32]*Client),
+		Connected: 0,
+		Options: &TunnelOptions{
+			Presence:       true,
+			MaxConnections: 500,
+		},
+	}
 )
 
 func main() {
@@ -29,7 +47,7 @@ func main() {
 
 	mux := pat.New()
 
-	mux.Get("/ws/:key", http.HandlerFunc(handleConnections))
+	mux.Get("/ws/:key", http.HandlerFunc(wsHandler.ServeHTTP))
 
 	http.Handle("/", mux)
 
@@ -37,37 +55,4 @@ func main() {
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
-}
-
-func handleConnections(w http.ResponseWriter, r *http.Request) {
-
-	params := r.URL.Query()
-	key := params.Get(":key")
-	log.Println(key)
-
-	// Checking tunnel's existance
-	tunnel := &Tunnel{
-		Key:       "PLSB987JB6",
-		Clients:   make(map[uint32]*Client),
-		Connected: 0,
-	}
-
-	conn, _ := upgrader.Upgrade(w, r, nil)
-
-	go func() {
-		client := NewClient(conn, tunnel)
-		client.Connect(tunnel)
-
-		defer func() {
-			client.Terminate()
-		}()
-
-		for {
-			_, data, err := conn.ReadMessage()
-			if err != nil {
-				return
-			}
-			log.Println(data)
-		}
-	}()
 }

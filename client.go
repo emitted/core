@@ -18,28 +18,29 @@ type Client struct {
 	Subs          map[string]*Tunnel
 	Stream        chan *Packet
 	MessageWriter *writer
+	Transport     *websocketTransport
 }
 
 // NewClient ...
-func NewClient(conn *websocket.Conn, tunnel *Tunnel) *Client {
+func NewClient(transport *websocketTransport) *Client {
 
 	client := &Client{
 		uid:           rand.Uint32(),
-		Conn:          conn,
 		Authenticated: true,
 		Subs:          make(map[string]*Tunnel),
 		Stream:        make(chan *Packet),
+		Transport:     transport,
 	}
 
 	// Creating message writer config
 	messageWriterConf := writerConfig{
 		WriteFn: func(data []byte) error {
-			client.Write(data)
+			client.Transport.Write(data)
 			return nil
 		},
 		WriteManyFn: func(data ...[]byte) error {
 			for _, payload := range data {
-				client.Write(payload)
+				client.Transport.Write(payload)
 			}
 			return nil
 		},
@@ -93,21 +94,31 @@ func (c *Client) Tunnels() []string {
 	return slice
 }
 
+// Close ...
+func (c *Client) Close() {
+
+	var toDelete []string
+	for _, tunnel := range c.Subs {
+		delete(tunnel.Clients, c.uid)
+		if tunnel.ClientsConnected() == 0 {
+			delete(hub.Subs, tunnel.Key)
+			toDelete = append(toDelete, tunnel.Key)
+		}
+	}
+	broker.Unsubscribe(toDelete)
+
+	c.MessageWriter.close()
+	delete(hub.Clients, c.uid)
+
+	c.Transport.Close(DisconnectNormal)
+}
+
 // Terminate function deletes all records about client and destroys connection.
 func (c *Client) Terminate() {
-	log.Println("Terminate function called")
 	c.Disconnect()
 	c.MessageWriter.close()
 	delete(hub.Clients, c.uid)
-	c.Conn.Close()
-}
-
-// Write ...
-func (c *Client) Write(data []byte) {
-	err := c.Conn.WriteMessage(websocket.TextMessage, data)
-	if err != nil {
-		log.Fatal("error while writing message to client: ", err)
-	}
+	c.Transport.Close(DisconnectNormal)
 }
 
 // WriteAuthPacket sends authentication confirmation message
