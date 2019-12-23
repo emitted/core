@@ -224,17 +224,19 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		client.Subscribe(channel)
 		client.Subscribe(channel2)
 
-		defer func() {
-			client.Close()
-		}()
+		//defer func() {
+		//	client.Close()
+		//}()
 
 		for {
-			_, data, err := conn.ReadMessage()
-			if err != nil {
-				return
-			}
 
-			log.Println(data)
+				_, data, err := conn.ReadMessage()
+				if err != nil {
+					log.Fatalln(err)
+				}
+
+				client.Handle(data)
+
 		}
 	}()
 

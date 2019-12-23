@@ -10,18 +10,19 @@ import (
 
 // Broker structure represents message broker, connected with API
 type Broker struct {
-	pool     *redis.Pool
-	Config   *BrokerConfig
-	subCh    chan *subRequest
-	messages chan redis.Message
+	pool        *redis.Pool
+	Config      *BrokerConfig
+	subCh       chan *subRequest
+	subMessages chan redis.Message
+	pubMessages chan *ClientMessage
 }
 
 // NewBroker function initializes Message Broker
 func NewBroker() *Broker {
 	return &Broker{
-		Config:   config.Broker,
-		subCh:    make(chan *subRequest, 0),
-		messages: make(chan redis.Message, 0),
+		Config:      config.Broker,
+		subCh:       make(chan *subRequest, 0),
+		subMessages: make(chan redis.Message, 0),
 	}
 }
 
@@ -87,6 +88,10 @@ func ChannelID(key string) string {
 	}
 }
 
+func (b *Broker) Enqueue(msg *ClientMessage)  {
+	b.pubMessages <- msg
+}
+
 func (b *Broker) runPubSub() {
 	conn := b.pool.Get()
 
@@ -122,13 +127,23 @@ func (b *Broker) runPubSub() {
 		}
 	}()
 
-	// these workers will broadcast new messages
+	go func() {
+		for {
+			select {
+			case msg := <- b.pubMessages:
+				log.Println("publishing message from client")
+				b.pool.Get().Do("PUBLISH", app.Key+":"+msg.Channel, msg.Data)
+			}
+		}
+	}()
+
+	// these workers will broadcast new subMessages
 	for i := 0; i < b.Config.PubSubWorkers; i++ {
 		log.Println("worker", i, "is up and running")
 		go func() {
 			for {
 				select {
-				case message := <-b.messages:
+				case message := <-b.subMessages:
 
 					switch ChannelID(message.Channel) {
 					case "ping":
@@ -156,12 +171,12 @@ func (b *Broker) runPubSub() {
 	//
 	// }()
 
-	// listening for new messages from pub/sub
+	// listening for new subMessages from pub/sub
 	go func() {
 		for {
 			switch m := psc.ReceiveWithTimeout(10 * time.Second).(type) {
 			case redis.Message:
-				b.messages <- m
+				b.subMessages <- m
 			case redis.Subscription:
 			}
 		}

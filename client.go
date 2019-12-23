@@ -3,6 +3,8 @@ package main
 import (
 	// "encoding/json"
 
+	"encoding/json"
+	"log"
 	"math/rand"
 )
 
@@ -116,5 +118,23 @@ func (c *Client) Close() {
 
 // WriteAuthPacket sends authentication confirmation message
 func (c *Client) WriteAuthPacket() {
-	c.MessageWriter.enqueue(AuthenticatedMessageResponse.Encode())
+	c.MessageWriter.enqueue(NewAuthenticationSucceededMessage(c.uid).Encode())
+}
+
+func (c *Client) Handle(data []byte) {
+
+	if len(data) == 0 {
+		return
+	}
+
+	var msg *ClientMessage
+	err := json.Unmarshal(data, &msg)
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	node.broker.Enqueue(msg)
+
 }

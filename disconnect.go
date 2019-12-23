@@ -58,7 +58,7 @@ var (
 		Reason:    "stale",
 		Reconnect: false,
 	}
-	// DisconnectSlow sent when client can't read messages fast enough.
+	// DisconnectSlow sent when client can't read subMessages fast enough.
 	DisconnectSlow = &Disconnect{
 		Code:      3008,
 		Reason:    "slow",
