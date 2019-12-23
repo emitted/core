@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
@@ -25,7 +26,8 @@ func NewBroker() *Broker {
 }
 
 // Run ...
-func (b *Broker) Run() {
+
+func (b *Broker) Run() error {
 
 	b.pool = &redis.Pool{
 		MaxIdle:   80,
@@ -46,6 +48,12 @@ func (b *Broker) Run() {
 	time.Sleep(time.Second)
 
 	go b.runPubSub()
+
+	return nil
+}
+
+func (b *Broker) Publish(app *App, channel *Channel, data []byte)  {
+	b.pool.Get().Do("PUBLISH", channel.App.Key + ":" + channel.Name, data)
 }
 
 func (b *Broker) runPublishPipeline() {
@@ -94,15 +102,17 @@ func (b *Broker) runPubSub() {
 			select {
 			case r := <-b.subCh:
 				if r.subscribe == true {
-					for _, tunnel := range r.tunnels {
-						err := psc.Subscribe(tunnel)
+					for _, channel := range r.channels {
+						log.Println(channel)
+						err := psc.Subscribe(channel)
 						if err != nil {
 							log.Fatal("error while subscribing to channel: ", err)
 						}
 					}
 				} else {
-					for _, tunnel := range r.tunnels {
-						err := psc.Unsubscribe(tunnel)
+					for _, channel := range r.channels {
+						err := psc.Unsubscribe(channel)
+
 						if err != nil {
 							log.Fatal("error while unsubscribing from channel: ", err)
 						}
@@ -119,16 +129,16 @@ func (b *Broker) runPubSub() {
 			for {
 				select {
 				case message := <-b.messages:
+
 					switch ChannelID(message.Channel) {
 					case "ping":
 					default:
-						tunnel := message.Channel
 
-						var publication Publication
-						publication.Tunnel = message.Channel
-						publication.Data = message.Data
+						arr := strings.Split(message.Channel, ":")
+						appKey := arr[0]
+						channelName := arr[1]
 
-						hub.BroadcastMessage(tunnel, publication)
+						node.hub.BroadcastMessage(appKey, channelName, message.Data)
 					}
 				}
 			}
@@ -136,15 +146,15 @@ func (b *Broker) runPubSub() {
 	}
 
 	// Adding current subscriptions to redis pub/sub
-	go func() {
-		tunnels := hub.Tunnels()
-
-		if len(tunnels) > 0 {
-			sub := newSubRequest(tunnels, true)
-			b.sendSubRequest(sub)
-		}
-
-	}()
+	// go func() {
+	// 	channels := hub.Channels()
+	//
+	// 	if len(channels) > 0 {
+	// 		sub := newSubRequest(channels, true)
+	// 		b.sendSubRequest(sub)
+	// 	}
+	//
+	// }()
 
 	// listening for new messages from pub/sub
 	go func() {
@@ -159,21 +169,21 @@ func (b *Broker) runPubSub() {
 }
 
 // Subscribe ...
-func (b *Broker) Subscribe(tunnels []string) {
-	sub := newSubRequest(tunnels, true)
+func (b *Broker) Subscribe(channels []string) {
+	sub := newSubRequest(channels, true)
 	b.sendSubRequest(sub)
 }
 
 // Unsubscribe ...
-func (b *Broker) Unsubscribe(tunnels []string) {
-	sub := newSubRequest(tunnels, false)
+func (b *Broker) Unsubscribe(channels []string) {
+	sub := newSubRequest(channels, false)
 	b.sendSubRequest(sub)
 }
 
-// SubRequest helps to subscribe tunnels by transferring them into a slice
+// SubRequest helps to subscribe channels by transferring them into a slice
 // it is stored in Broker.subCh, which is listened by workers
 type subRequest struct {
-	tunnels   []string
+	channels  []string
 	subscribe bool
 }
 
@@ -183,9 +193,9 @@ func (b *Broker) sendSubRequest(sub *subRequest) {
 }
 
 // NewSubRequest ...
-func newSubRequest(tunnels []string, subscribe bool) *subRequest {
+func newSubRequest(channels []string, subscribe bool) *subRequest {
 	return &subRequest{
-		tunnels:   tunnels,
+		channels:  channels,
 		subscribe: subscribe,
 	}
 }

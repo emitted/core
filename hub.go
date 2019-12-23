@@ -1,46 +1,54 @@
 package main
 
-// Hub struct contains all data and structs of clients,tunnels etc.
+import (
+	"errors"
+)
+
+// Hub struct contains all data and structs of clients,channels etc.
 type Hub struct {
-	Subs    map[string]*Tunnel // tunnels map
-	Clients map[uint32]*Client
+	Apps           map[string]*App
+	numConnections int
+	numClients     int
 }
 
 // NewHub is a constructor method for the Hub struct
 func NewHub() *Hub {
 	return &Hub{
-		Subs:    make(map[string]*Tunnel, 0),
-		Clients: make(map[uint32]*Client, 0),
+		Apps: make(map[string]*App, 0),
+		numClients: 0,
+		numConnections: 0,
 	}
 }
 
-// AddSub ...
-func (hub *Hub) AddSub(tunnel *Tunnel) (bool, error) {
-	_, ok := hub.Subs[tunnel.Key]
+// AddApp ...
+func (hub *Hub) AddApp(app *App) {
+	_, ok := hub.Apps[app.Key]
 	if !ok {
-		hub.Subs[tunnel.Key] = tunnel
+		hub.Apps[app.Key] = app
 	}
+}
+
+// FindApp ...
+func (hub *Hub) FindApp(secret string) (*App, error) {
+	app, ok := hub.Apps[secret]
 
 	if !ok {
-		return true, nil
+		return nil, errors.New("application is not found")
 	}
-	return false, nil
+
+	return app, nil
 }
 
 // BroadcastMessage ...
-func (hub *Hub) BroadcastMessage(tunnel string, publication Publication) {
-	for _, client := range hub.Subs[tunnel].Clients {
-		packet, _ := publication.ToPacket()
-		client.MessageWriter.enqueue(packet.Encode())
-	}
-}
+func (hub *Hub) BroadcastMessage(appKey string, channelName string, data []byte) {
 
-// Tunnels ...
-func (hub *Hub) Tunnels() []string {
-	tunnels := make([]string, 0)
-	for t := range hub.Subs {
-		tunnels = append(tunnels, t)
+	message := &Message{
+		Channel: channelName,
+		Event: "message",
+		Data:  string(data),
 	}
 
-	return tunnels
+	for _, client := range hub.Apps[appKey].Channels[channelName].Clients {
+		client.MessageWriter.enqueue(message.Encode())
+	}
 }

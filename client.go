@@ -3,20 +3,16 @@ package main
 import (
 	// "encoding/json"
 
-	"log"
 	"math/rand"
-
-	"github.com/gorilla/websocket"
 )
 
 // Client ...
 type Client struct {
 	uid           uint32
-	Conn          *websocket.Conn
-	User          string
 	Authenticated bool
-	Subs          map[string]*Tunnel
-	Stream        chan *Packet
+	App           *App
+	Subs          map[string]*Channel
+	messageCh     chan *Message
 	MessageWriter *writer
 	Transport     *websocketTransport
 }
@@ -26,9 +22,9 @@ func NewClient(transport *websocketTransport) *Client {
 
 	client := &Client{
 		uid:           rand.Uint32(),
-		Authenticated: true,
-		Subs:          make(map[string]*Tunnel),
-		Stream:        make(chan *Packet),
+		Authenticated: false,
+		Subs:          make(map[string]*Channel),
+		messageCh:     make(chan *Message),
 		Transport:     transport,
 	}
 
@@ -53,39 +49,35 @@ func NewClient(transport *websocketTransport) *Client {
 }
 
 // Connect ...
-func (c *Client) Connect(tunnel *Tunnel) {
-	c.Subs[tunnel.Key] = tunnel
+func (c *Client) Connect(app *App) {
 
-	first, err := hub.AddSub(tunnel)
-	if err != nil {
-		log.Fatal(err)
-	}
+	node.hub.AddApp(app)
+	c.App = app
 
-	hub.Subs[tunnel.Key].Clients[c.uid] = c
-	hub.Clients[c.uid] = c
-
-	if first {
-		broker.Subscribe([]string{tunnel.Key})
-	}
+	app.Clients[c.uid] = c
+	app.Stats.Connections++
 
 	c.WriteAuthPacket()
 }
 
-// Disconnect ...
-func (c *Client) Disconnect() {
-	var toDelete []string
-	for _, tunnel := range c.Subs {
-		delete(tunnel.Clients, c.uid)
-		if tunnel.ClientsConnected() == 0 {
-			delete(hub.Subs, tunnel.Key)
-			toDelete = append(toDelete, tunnel.Key)
-		}
+// Subscribe ...
+func (c *Client) Subscribe(channel *Channel) {
+
+	first := c.App.Subscribe(channel)
+	channel.Clients[c.uid] = c
+	c.Subs[channel.Name] = channel
+
+	channel.Stats.Connections++
+
+	if first {
+		subKey := c.App.Key + ":" + channel.Name
+		node.broker.Subscribe([]string{subKey})
 	}
-	broker.Unsubscribe(toDelete)
+
 }
 
-// Tunnels ...
-func (c *Client) Tunnels() []string {
+// Channels ...
+func (c *Client) Channels() []string {
 	var slice []string
 	for t := range c.Subs {
 		slice = append(slice, t)
@@ -98,35 +90,31 @@ func (c *Client) Tunnels() []string {
 func (c *Client) Close() {
 
 	var toDelete []string
-	for _, tunnel := range c.Subs {
-		delete(tunnel.Clients, c.uid)
-		if tunnel.ClientsConnected() == 0 {
-			delete(hub.Subs, tunnel.Key)
-			toDelete = append(toDelete, tunnel.Key)
+	for _, channel := range c.Subs {
+		delete(channel.Clients, c.uid)
+		channel.Stats.Connections--
+		if channel.Stats.Connections == 0 {
+			delete(c.App.Channels, channel.Name)
+			toDelete = append(toDelete, channel.App.Key+":"+channel.Name)
 		}
 	}
-	broker.Unsubscribe(toDelete)
+	if len(toDelete) > 0 {
+		node.broker.Unsubscribe(toDelete)
+	}
+
+	if len(c.App.Channels) == 0 {
+		delete(node.hub.Apps, c.App.Key)
+	}
+
+	c.App.Stats.Connections--
 
 	c.MessageWriter.close()
-	delete(hub.Clients, c.uid)
+	delete(c.App.Clients, c.uid)
 
-	c.Transport.Close(DisconnectNormal)
-}
-
-// Terminate function deletes all records about client and destroys connection.
-func (c *Client) Terminate() {
-	c.Disconnect()
-	c.MessageWriter.close()
-	delete(hub.Clients, c.uid)
 	c.Transport.Close(DisconnectNormal)
 }
 
 // WriteAuthPacket sends authentication confirmation message
 func (c *Client) WriteAuthPacket() {
-	packet := &Packet{
-		Event: "message",
-		Data:  "Authentication succeded",
-	}
-
-	c.MessageWriter.enqueue(packet.Encode())
+	c.MessageWriter.enqueue(AuthenticatedMessageResponse.Encode())
 }

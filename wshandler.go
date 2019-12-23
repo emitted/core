@@ -151,9 +151,8 @@ func NewWebsocketHandler(c WebsocketConfig) *WebsocketHandler {
 
 func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
-	params := r.URL.Query()
-	key := params.Get(":key")
-	log.Println(key)
+	//params := r.URL.Query()
+	//key := params.Get(":secret")
 
 	compression := s.config.Compression
 	compressionLevel := s.config.CompressionLevel
@@ -215,17 +214,18 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			pingInterval: pingInterval,
 			writeTimeout: writeTimeout,
 		}
-
 		closeCh := make(chan struct{}, 1)
 		transport := newWebsocketTransport(conn, opts, closeCh)
 
 		client := NewClient(transport)
-		client.Connect(tunnel)
 
-		log.Println(tunnel.Clients)
+		client.Connect(app)
+
+		client.Subscribe(channel)
+		client.Subscribe(channel2)
 
 		defer func() {
-			client.Terminate()
+			client.Close()
 		}()
 
 		for {
@@ -233,6 +233,7 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return
 			}
+
 			log.Println(data)
 		}
 	}()

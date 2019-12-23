@@ -70,12 +70,7 @@ func NewLogEntry(level LogLevel, message string, fields ...map[string]interface{
 // LogHandler handles log entries - i.e. writes into correct destination if necessary.
 type LogHandler func(LogEntry)
 
-func newLogger(level LogLevel, handler LogHandler) *logger {
-	return &logger{
-		level:   level,
-		handler: handler,
-	}
-}
+
 
 // logger can log entries.
 type logger struct {
