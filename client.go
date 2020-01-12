@@ -3,100 +3,129 @@ package main
 import (
 	// "encoding/json"
 
-	"encoding/json"
-	"log"
+	"context"
+	protocol "github.com/sireax/Emmet-Go-Server/internal/proto"
 	"math/rand"
+	"sync"
 )
 
 // Client ...
 type Client struct {
+
+	mu sync.RWMutex
+	presenceMu sync.Mutex
+
+	ctx context.Context
+
+	authenticated bool
+	closed bool
+
 	uid           uint32
-	Authenticated bool
-	App           *App
-	Subs          map[string]*Channel
-	messageCh     chan *Message
-	MessageWriter *writer
-	Transport     *websocketTransport
+	app           *App
+	channels      map[string]*Channel
+	messageWriter *writer
+	transport     *websocketTransport
+
+	pubBuffer []*Publication
+
+	info Raw
 }
 
 // NewClient ...
-func NewClient(transport *websocketTransport) *Client {
+func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
+
+	uuid := rand.Uint32()
 
 	client := &Client{
-		uid:           rand.Uint32(),
-		Authenticated: false,
-		Subs:          make(map[string]*Channel),
-		messageCh:     make(chan *Message),
-		Transport:     transport,
+		ctx:           ctx,
+		uid:           uuid,
+		channels:      make(map[string]*Channel),
+		transport:     t,
+		pubBuffer: make([]*Publication, 0),
 	}
 
 	// Creating message writer config
 	messageWriterConf := writerConfig{
 		WriteFn: func(data []byte) error {
-			client.Transport.Write(data)
+			client.transport.Write(data)
 			return nil
 		},
 		WriteManyFn: func(data ...[]byte) error {
 			for _, payload := range data {
-				client.Transport.Write(payload)
+				client.transport.Write(payload)
 			}
 			return nil
 		},
 	}
 
 	// Setting client's message writer
-	client.MessageWriter = newWriter(messageWriterConf)
+	client.messageWriter = newWriter(messageWriterConf)
 
-	return client
+	return client, nil
+}
+
+func (c *Client) CloseUnauthenticated()  {
+	c.mu.RLock()
+	c.authenticated = false
+	c.closed = true
+	c.mu.RUnlock()
+
+	if !c.authenticated && !c.closed {
+		c.Close()
+	}
 }
 
 // Connect ...
 func (c *Client) Connect(app *App) {
 
 	node.hub.AddApp(app)
-	c.App = app
+	c.app = app
 
 	app.Clients[c.uid] = c
 	app.Stats.Connections++
-
-	c.WriteAuthPacket()
 }
 
 // Subscribe ...
 func (c *Client) Subscribe(channel *Channel) {
 
-	first := c.App.Subscribe(channel)
+	//channel, ok := c.app.Channels[channelName]
+	//if !ok {
+	//	c.app.Channels[channelName] = NewChannel(c.app, channelName, &ChannelOptions{
+	//		AllowClientMessages: true,
+	//	})
+	//}
+
+	first := c.app.Subscribe(channel)
 	channel.Clients[c.uid] = c
-	c.Subs[channel.Name] = channel
+	c.channels[channel.Name] = channel
 
 	channel.Stats.Connections++
 
 	if first {
-		subKey := c.App.Key + ":" + channel.Name
+		subKey := c.app.Key + ":" + channel.Name
 		node.broker.Subscribe([]string{subKey})
 	}
 
 }
 
-// Channels ...
-func (c *Client) Channels() []string {
-	var slice []string
-	for t := range c.Subs {
-		slice = append(slice, t)
-	}
-
-	return slice
-}
-
 // Close ...
 func (c *Client) Close() {
+	c.presenceMu.Lock()
+	defer c.presenceMu.Unlock()
+	c.mu.Lock()
+
+	if c.closed {
+		c.mu.Unlock()
+		return
+	}
+	c.closed = true
 
 	var toDelete []string
-	for _, channel := range c.Subs {
+	for _, channel := range c.channels {
 		delete(channel.Clients, c.uid)
 		channel.Stats.Connections--
 		if channel.Stats.Connections == 0 {
-			delete(c.App.Channels, channel.Name)
+			delete(c.app.Channels, channel.Name)
 			toDelete = append(toDelete, channel.App.Key+":"+channel.Name)
 		}
 	}
@@ -104,37 +133,152 @@ func (c *Client) Close() {
 		node.broker.Unsubscribe(toDelete)
 	}
 
-	if len(c.App.Channels) == 0 {
-		delete(node.hub.Apps, c.App.Key)
+	if len(c.app.Channels) == 0 {
+		delete(node.hub.Apps, c.app.Key)
 	}
 
-	c.App.Stats.Connections--
+	c.app.Stats.Connections--
 
-	c.MessageWriter.close()
-	delete(c.App.Clients, c.uid)
+	c.messageWriter.close()
+	delete(c.app.Clients, c.uid)
 
-	c.Transport.Close(DisconnectNormal)
+	c.transport.Close(DisconnectNormal)
 }
 
-// WriteAuthPacket sends authentication confirmation message
-func (c *Client) WriteAuthPacket() {
-	c.MessageWriter.enqueue(NewAuthenticationSucceededMessage(c.uid).Encode())
+func (c *Client) Unsubscribe(ch string)  {
+	c.mu.RLock()
+	_, ok := c.channels[ch]
+	c.mu.RUnlock()
+
+	if ok {
+		c.mu.Lock()
+		delete(c.channels, ch)
+		c.mu.Unlock()
+	}
 }
+
+/*
+|
+|
+|---------------------------------------
+|	Command handlers
+|---------------------------------------
+|
+|
+ */
 
 func (c *Client) Handle(data []byte) {
+	
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return
+	}
+	c.mu.Unlock()
 
 	if len(data) == 0 {
 		return
 	}
 
-	var msg *ClientMessage
-	err := json.Unmarshal(data, &msg)
-
+	decoder := protocol.NewProtobufCommandDecoder(data)
+	cmd, err := decoder.Decode()
 	if err != nil {
-		log.Println(err)
 		return
 	}
 
-	node.broker.Enqueue(msg)
+	c.HandleCommand(cmd)
+
+	select {
+	case <-c.ctx.Done():
+		return
+	default:
+
+	}
 
 }
+
+func (c *Client) HandleCommand(cmd *Command) *Disconnect {
+
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil
+	}
+	c.mu.Unlock()
+
+	var disconnect *Disconnect
+
+	switch cmd.Type {
+	case MethodTypeSubscribe:
+		disconnect = c.handleSubscribe(cmd.Data)
+	case MethodTypeUnsubscribe:
+		disconnect = c.handleUnsubscribe(cmd.Data)
+	case MethodTypePublish:
+		disconnect = c.handlePublish(cmd.Data)
+	case MethodTypePresence:
+		disconnect = c.handlePresence(cmd.Data)
+	}
+
+	return disconnect
+}
+
+func (c *Client) handleSubscribe(data []byte) *Disconnect {
+	var disconnect *Disconnect
+
+	_, err := protocol.NewProtobufParamsDecoder().DecodeSubscribe(data)
+	if err != nil {
+		disconnect = DisconnectBadRequest
+	}
+
+	//c.Subscribe(msg.Channel)
+
+	return disconnect
+}
+
+func (c *Client) handleUnsubscribe(data []byte) *Disconnect {
+	var disconnect *Disconnect
+
+	_, err := protocol.NewProtobufParamsDecoder().DecodeUnsubscribe(data)
+	if err != nil {
+		disconnect =  DisconnectBadRequest
+	}
+
+	//c.Subscribe(msg.Channel)
+
+	return disconnect
+}
+
+func (c *Client) handlePublish(data []byte) *Disconnect {
+
+	var disconnect *Disconnect
+
+	p, err := protocol.NewProtobufParamsDecoder().DecodePublish(data)
+	if err != nil {
+		disconnect = DisconnectBadRequest
+	}
+
+	chId := makeChId(c.app.Key, p.Channel)
+
+	node.broker.handlePublish(chId, p)
+
+	return disconnect
+}
+
+func (c *Client) handlePresence(data []byte) *Disconnect {
+
+	var disconnect *Disconnect
+
+	_, err := protocol.NewProtobufParamsDecoder().DecodePresence(data)
+	if err != nil {
+		disconnect = DisconnectBadRequest
+	}
+
+	return disconnect
+
+}
+
+
+
+
+
+

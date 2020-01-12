@@ -20,12 +20,6 @@ var (
 		Reason:    "shutdown",
 		Reconnect: true,
 	}
-	// DisconnectTunnelNotFound sent when client came with invalid token.
-	DisconnectTunnelNotFound = &Disconnect{
-		Code:      3002,
-		Reason:    "tunnel is not found",
-		Reconnect: false,
-	}
 	// DisconnectBadRequest sent when client uses malformed protocol
 	// frames or wrong order of commands.
 	DisconnectBadRequest = &Disconnect{

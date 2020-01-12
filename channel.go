@@ -21,6 +21,7 @@ type ChannelOptions struct {
 	Publish        bool `json:"publish"`
 	Presence       bool `json:"presence"`
 	MaxConnections int  `json:"max_connections"`
+	AllowClientMessages bool `json:"client_messages"`
 }
 
 // NewChannel is a constructor for Channel structure

@@ -1,6 +1,6 @@
 package main
 
-// App structure represents client's application that allows to easily manage channels
+// app structure represents client's application that allows to easily manage channels
 
 // AppOptions ...
 type AppOptions struct {
@@ -13,7 +13,7 @@ type AppStats struct {
 	Messages    int
 }
 
-// App ...
+// app ...
 type App struct {
 	Key      string
 	Secret   string
@@ -35,4 +35,34 @@ func (app *App) Subscribe(channel *Channel) bool {
 	}
 
 	return isFirst
+}
+
+func (app *App) addSub(ch string, c *Client) bool  {
+
+	app.Clients[c.uid] = c
+
+	if _, ok := app.Channels[ch]; ok {
+		return true
+	}
+
+	return false
+}
+
+func (app *App) removeSub(ch string, c *Client) bool  {
+
+	if _, ok := app.Channels[ch]; !ok {
+		return true
+	}
+
+	if _, ok := app.Channels[ch].Clients[c.uid]; !ok {
+		return true
+	}
+
+	delete(app.Channels[ch].Clients, c.uid)
+
+	if len(app.Channels[ch].Clients) == 0 {
+		delete(app.Channels, ch)
+	}
+
+	return false
 }

@@ -72,7 +72,7 @@ func (t *websocketTransport) Write(data []byte) error {
 			_ = t.conn.SetWriteDeadline(time.Now().Add(t.options.writeTimeout))
 		}
 
-		var messageType = websocket.TextMessage
+		var messageType = websocket.BinaryMessage
 
 		err := t.conn.WriteMessage(messageType, data)
 		if err != nil {
@@ -232,7 +232,7 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 				_, data, err := conn.ReadMessage()
 				if err != nil {
-					log.Fatalln(err)
+					return
 				}
 
 				client.Handle(data)

@@ -37,7 +37,7 @@ var (
 		},
 	}
 
-	channel = NewChannel(app, "chat", &ChannelOptions{})
+	channel = NewChannel(app, "chat", &ChannelOptions{AllowClientMessages:true})
 
 	channel2 = NewChannel(app, "nofitications", &ChannelOptions{})
 )
@@ -73,6 +73,21 @@ func main() {
 		w.WriteHeader(200)
 		w.Write(data)
 
+	}))
+
+	mux.Post("/api/:secret/push", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		params := r.URL.Query()
+		secret := params.Get(":secret")
+
+		_, err := node.hub.FindApp(secret)
+		if err != nil {
+			w.WriteHeader(403)
+			w.Write([]byte("Application does not exist or there are no connections"))
+			return
+		}
+
+		//node.broker.Enqueue()
 	}))
 
 	http.Handle("/", mux)

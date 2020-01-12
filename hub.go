@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"log"
 )
 
 // Hub struct contains all data and structs of clients,channels etc.
@@ -40,15 +41,34 @@ func (hub *Hub) FindApp(secret string) (*App, error) {
 }
 
 // BroadcastMessage ...
-func (hub *Hub) BroadcastMessage(appKey string, channelName string, data []byte) {
-
-	message := &Message{
-		Channel: channelName,
-		Event: "message",
-		Data:  string(data),
-	}
+func (hub *Hub) BroadcastMessage(appKey string, channelName string, pub *Publication) {
 
 	for _, client := range hub.Apps[appKey].Channels[channelName].Clients {
-		client.MessageWriter.enqueue(message.Encode())
+		payload, _ := pub.Marshal()
+		log.Println(payload)
+
+		client.messageWriter.enqueue(pub.Data)
+	}
+}
+
+func (hub *Hub) BroadcastJoin(appKey string, join *Join) {
+	for _, client := range hub.Apps[appKey].Clients {
+
+		payload, err := join.Marshal()
+		if err != nil {
+			return
+		}
+		client.messageWriter.enqueue(payload)
+	}
+}
+
+func (hub *Hub) BroadcastLeave(appKey string, leave *Leave) {
+	for _, client := range hub.Apps[appKey].Clients {
+
+		payload, err := leave.Marshal()
+		if err != nil {
+			return
+		}
+		client.messageWriter.enqueue(payload)
 	}
 }

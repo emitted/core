@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package protocol;
+
+message Error {
+    uint32 code = 1;
+    string message = 2;
+
+}
+
+enum MethodType {
+    SUBSCRIBE = 0;
+    UNSUBSCRIBE = 1;
+    PUBLISH = 2;
+    PRESENCE = 3;
+    PRESENCE_STATS = 4;
+    PING = 5;
+}
+
+message Command {
+    MethodType type = 1;
+    bytes data = 2;
+}
+
+message Reply {
+    Error reply = 1;
+    bytes result = 2;
+}
+
+
+enum PushType {
+    PUBLICATION = 0;
+    JOIN = 1;
+    LEAVE = 2;
+    SERVICE = 4;
+}
+
+message Push {
+    PushType type = 1;
+    bytes data = 2;
+}
+
+message ClientInfo {
+    string user = 1;
+    string client = 2;
+    bytes conn_info = 3;
+    bytes chan_info = 4;
+}
+
+message Publication {
+    bytes data = 1;
+    ClientInfo info = 2;
+}
+
+message Join {
+    string channel = 1;
+    ClientInfo info = 2;
+}
+
+message Leave {
+    string channel = 1;
+    ClientInfo info = 2;
+}
+
+message SubscribeRequest {
+    string channel = 1;
+}
+
+message UnsubscribeRequest {
+    string channel = 1;
+}
+
+message PublishRequest {
+    string channel = 1;
+    bytes data = 2;
+}
+
+message PingRequest {
+}
+
+message PresenceRequest {
+    string channel = 1;
+}

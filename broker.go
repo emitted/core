@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"strings"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
@@ -14,19 +13,28 @@ type Broker struct {
 	Config      *BrokerConfig
 	subCh       chan *subRequest
 	subMessages chan redis.Message
-	pubMessages chan *ClientMessage
+	pubMessages chan pubRequest
 }
 
-// NewBroker function initializes Message Broker
+// NewBroker function initializes BrokerMessage Broker
 func NewBroker() *Broker {
 	return &Broker{
 		Config:      config.Broker,
 		subCh:       make(chan *subRequest, 0),
 		subMessages: make(chan redis.Message, 0),
+		pubMessages: make(chan pubRequest, 0),
 	}
 }
 
-// Run ...
+/*
+|
+|
+|--------------------------------------------------
+|	Run broker
+|--------------------------------------------------
+|
+|
+ */
 
 func (b *Broker) Run() error {
 
@@ -44,20 +52,29 @@ func (b *Broker) Run() error {
 		},
 	}
 
-	go b.runPublishPipeline()
+	go runForever(func() {
+		b.runPublishPipeline()
+	})
 
-	time.Sleep(time.Second)
-
-	go b.runPubSub()
+	go runForever(func() {
+		b.runPubSub()
+	})
 
 	return nil
 }
 
-func (b *Broker) Publish(app *App, channel *Channel, data []byte)  {
-	b.pool.Get().Do("PUBLISH", channel.App.Key + ":" + channel.Name, data)
-}
+/*
+|
+|
+|---------------------------------------------------
+|	Publish pipeline
+|---------------------------------------------------
+|
+|
+ */
 
 func (b *Broker) runPublishPipeline() {
+	var prs []pubRequest
 
 	pingTicker := time.NewTicker(time.Second)
 	defer pingTicker.Stop()
@@ -73,24 +90,42 @@ func (b *Broker) runPublishPipeline() {
 				return
 			}
 			conn.Close()
+
+		case msg := <-b.pubMessages:
+			prs = append(prs, msg)
+
+		loop:
+
+			for len(prs) < 512 {
+				select {
+				case msg := <- b.pubMessages:
+					prs = append(prs, msg)
+				default:
+					break loop
+				}
+
+				conn := node.broker.pool.Get()
+				for i := range prs {
+					err := conn.Send("PUBLISH", prs[i].chId, prs[i].data)
+					if err != nil {
+						log.Println("Failed publishing message: ", err)
+					}
+				}
+			}
 		}
 	}
 
 }
 
-// ChannelID ...
-func ChannelID(key string) string {
-	switch key {
-	case "PING_TEST_CHANNEL":
-		return "ping"
-	default:
-		return key
-	}
-}
-
-func (b *Broker) Enqueue(msg *ClientMessage)  {
-	b.pubMessages <- msg
-}
+/*
+|
+|
+|-------------------------------------------------
+|	Publish / Subscribe goroutines
+|-------------------------------------------------
+|
+|
+ */
 
 func (b *Broker) runPubSub() {
 	conn := b.pool.Get()
@@ -99,9 +134,12 @@ func (b *Broker) runPubSub() {
 		Conn: conn,
 	}
 
-	psc.Subscribe("PING_TEST_CHANNEL")
+	err := psc.Subscribe("PING_TEST_CHANNEL")
+	if err != nil {
+		log.Fatalln("Something wrong with the ping channel: ", err)
+	}
 
-	// these workers will add new subscriptions
+	// handling sub/unsub requests
 	go func() {
 		for {
 			select {
@@ -127,19 +165,9 @@ func (b *Broker) runPubSub() {
 		}
 	}()
 
-	go func() {
-		for {
-			select {
-			case msg := <- b.pubMessages:
-				log.Println("publishing message from client")
-				b.pool.Get().Do("PUBLISH", app.Key+":"+msg.Channel, msg.Data)
-			}
-		}
-	}()
-
-	// these workers will broadcast new subMessages
+	// broadcasting new messages
 	for i := 0; i < b.Config.PubSubWorkers; i++ {
-		log.Println("worker", i, "is up and running")
+		log.Println("message worker", i, "is up and running")
 		go func() {
 			for {
 				select {
@@ -149,27 +177,42 @@ func (b *Broker) runPubSub() {
 					case "ping":
 					default:
 
-						arr := strings.Split(message.Channel, ":")
-						appKey := arr[0]
-						channelName := arr[1]
+						var push Push
+						err := push.Unmarshal(message.Data)
+						if err != nil {
+							continue
+						}
 
-						node.hub.BroadcastMessage(appKey, channelName, message.Data)
+						appKey, channelName := parseChId(message.Channel)
+
+						switch push.Type {
+						case PushTypePublication:
+							var pub Publication
+							err := pub.Unmarshal(pub.Data)
+							if err != nil {
+								continue
+							}
+							node.hub.BroadcastMessage(appKey, channelName, &pub)
+						case PushTypeJoin:
+							var join Join
+							err := join.Unmarshal(push.Data)
+							if err != nil {
+								continue
+							}
+							node.hub.BroadcastJoin(appKey, &join)
+						case PushTypeLeave:
+							var leave Leave
+							err := leave.Unmarshal(push.Data)
+							if err != nil {
+								continue
+							}
+							node.hub.BroadcastLeave(appKey, &leave)
+						}
 					}
 				}
 			}
 		}()
 	}
-
-	// Adding current subscriptions to redis pub/sub
-	// go func() {
-	// 	channels := hub.Channels()
-	//
-	// 	if len(channels) > 0 {
-	// 		sub := newSubRequest(channels, true)
-	// 		b.sendSubRequest(sub)
-	// 	}
-	//
-	// }()
 
 	// listening for new subMessages from pub/sub
 	go func() {
@@ -195,8 +238,124 @@ func (b *Broker) Unsubscribe(channels []string) {
 	b.sendSubRequest(sub)
 }
 
-// SubRequest helps to subscribe channels by transferring them into a slice
-// it is stored in Broker.subCh, which is listened by workers
+/*
+|
+|
+|--------------------------------------------------------
+|	Client handlers
+|--------------------------------------------------------
+|
+|
+ */
+
+func (b *Broker) handlePublish(chId string, p *PublishRequest) {
+
+	push := &Push{
+		Type: PushTypePublication,
+		Data: p.Data,
+	}
+
+	bytesData, err := push.Marshal()
+	if err != nil {
+		return
+	}
+
+	pr := pubRequest{
+		chId: chId,
+		data: bytesData,
+	}
+
+	select {
+	case b.pubMessages <- pr:
+	default:
+
+	}
+
+}
+
+func (b *Broker) handleSubscribe(chId string, r *SubscribeRequest)  {
+
+	join := &Join{
+		Channel: r.Channel,
+	}
+
+	bytesData, err := join.Marshal()
+	if err != nil {
+		return
+	}
+
+	push := &Push{
+		Type: PushTypeJoin,
+		Data: bytesData,
+	}
+
+	bytePush, err := push.Marshal()
+	if err != nil {
+		return
+	}
+
+	pr := pubRequest{
+		chId: chId,
+		data: bytePush,
+	}
+
+	select {
+	case b.pubMessages <- pr:
+	default:
+
+	}
+}
+
+func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest)  {
+
+	leave := &Leave{
+		Channel: r.Channel,
+	}
+
+	bytesData, err := leave.Marshal()
+	if err != nil {
+		return
+	}
+
+	push := &Push{
+		Type: PushTypeLeave,
+		Data: bytesData,
+	}
+
+	bytesPush, err := push.Marshal()
+	if err != nil {
+		return
+	}
+
+	pr := pubRequest{
+		chId: chId,
+		data: bytesPush,
+	}
+
+	select {
+	case b.pubMessages <- pr:
+	default:
+
+	}
+
+}
+
+
+/*
+|
+|
+|---------------------------------------------------------
+|	Broker requests
+|---------------------------------------------------------
+|
+|
+ */
+
+type pubRequest struct {
+	chId string
+	data []byte
+}
+
 type subRequest struct {
 	channels  []string
 	subscribe bool
@@ -207,7 +366,6 @@ func (b *Broker) sendSubRequest(sub *subRequest) {
 	return
 }
 
-// NewSubRequest ...
 func newSubRequest(channels []string, subscribe bool) *subRequest {
 	return &subRequest{
 		channels:  channels,
