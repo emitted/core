@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"github.com/centrifugal/centrifuge"
 	"log"
 	"math/rand"
@@ -114,4 +115,22 @@ func (node *Node) updateMetrics() {
 			node.metrics.clients = node.hub.numClients
 		}
 	}
+}
+
+func (n *Node) Shutdown(ctx context.Context) error {
+	n.mu.Lock()
+	if n.shutdown {
+		n.mu.Unlock()
+		return nil
+	}
+	n.shutdown = true
+	close(n.shutdownCh)
+	n.mu.Unlock()
+
+	err := node.hub.shutdown(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

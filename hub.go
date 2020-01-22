@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log"
 )
@@ -15,8 +16,8 @@ type Hub struct {
 // NewHub is a constructor method for the Hub struct
 func NewHub() *Hub {
 	return &Hub{
-		Apps: make(map[string]*App, 0),
-		numClients: 0,
+		Apps:           make(map[string]*App, 0),
+		numClients:     0,
 		numConnections: 0,
 	}
 }
@@ -71,4 +72,16 @@ func (hub *Hub) BroadcastLeave(appKey string, leave *Leave) {
 		}
 		client.messageWriter.enqueue(payload)
 	}
+}
+
+func (h *Hub) shutdown(ctx context.Context) error {
+	disconnect = DisconnectShutdown
+
+	clients := make([]*Client, 0, len(h.conns))
+	for _, client := range h.conns {
+		clients = append(clients, client)
+	}
+	h.mu.RUnlock()
+
+	h.mu.RLock()
 }
