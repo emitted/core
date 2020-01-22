@@ -4,21 +4,21 @@ import (
 	// "encoding/json"
 
 	"context"
-	protocol "github.com/sireax/Emmet-Go-Server/internal/proto"
+	protocol "github.com/sireax/emitted/internal/proto"
+	"log"
 	"math/rand"
 	"sync"
 )
 
 // Client ...
 type Client struct {
-
-	mu sync.RWMutex
+	mu         sync.RWMutex
 	presenceMu sync.Mutex
 
 	ctx context.Context
 
 	authenticated bool
-	closed bool
+	closed        bool
 
 	uid           uint32
 	app           *App
@@ -37,10 +37,10 @@ func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 	uuid := rand.Uint32()
 
 	client := &Client{
-		ctx:           ctx,
-		uid:           uuid,
-		channels:      make(map[string]*Channel),
-		transport:     t,
+		ctx:       ctx,
+		uid:       uuid,
+		channels:  make(map[string]*Channel),
+		transport: t,
 		pubBuffer: make([]*Publication, 0),
 	}
 
@@ -64,7 +64,7 @@ func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 	return client, nil
 }
 
-func (c *Client) CloseUnauthenticated()  {
+func (c *Client) CloseUnauthenticated() {
 	c.mu.RLock()
 	c.authenticated = false
 	c.closed = true
@@ -145,7 +145,7 @@ func (c *Client) Close() {
 	c.transport.Close(DisconnectNormal)
 }
 
-func (c *Client) Unsubscribe(ch string)  {
+func (c *Client) Unsubscribe(ch string) {
 	c.mu.RLock()
 	_, ok := c.channels[ch]
 	c.mu.RUnlock()
@@ -165,10 +165,12 @@ func (c *Client) Unsubscribe(ch string)  {
 |---------------------------------------
 |
 |
- */
+*/
 
 func (c *Client) Handle(data []byte) {
-	
+
+	log.Println(data)
+
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -183,7 +185,7 @@ func (c *Client) Handle(data []byte) {
 	decoder := protocol.NewProtobufCommandDecoder(data)
 	cmd, err := decoder.Decode()
 	if err != nil {
-		return
+		log.Fatal(err)
 	}
 
 	c.HandleCommand(cmd)
@@ -210,6 +212,7 @@ func (c *Client) HandleCommand(cmd *Command) *Disconnect {
 
 	switch cmd.Type {
 	case MethodTypeSubscribe:
+		log.Println("subscribe")
 		disconnect = c.handleSubscribe(cmd.Data)
 	case MethodTypeUnsubscribe:
 		disconnect = c.handleUnsubscribe(cmd.Data)
@@ -230,8 +233,6 @@ func (c *Client) handleSubscribe(data []byte) *Disconnect {
 		disconnect = DisconnectBadRequest
 	}
 
-	//c.Subscribe(msg.Channel)
-
 	return disconnect
 }
 
@@ -240,7 +241,7 @@ func (c *Client) handleUnsubscribe(data []byte) *Disconnect {
 
 	_, err := protocol.NewProtobufParamsDecoder().DecodeUnsubscribe(data)
 	if err != nil {
-		disconnect =  DisconnectBadRequest
+		disconnect = DisconnectBadRequest
 	}
 
 	//c.Subscribe(msg.Channel)
@@ -276,9 +277,3 @@ func (c *Client) handlePresence(data []byte) *Disconnect {
 	return disconnect
 
 }
-
-
-
-
-
-

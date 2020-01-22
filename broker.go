@@ -27,14 +27,12 @@ func NewBroker() *Broker {
 }
 
 /*
-|
-|
 |--------------------------------------------------
 |	Run broker
 |--------------------------------------------------
 |
 |
- */
+*/
 
 func (b *Broker) Run() error {
 
@@ -71,7 +69,7 @@ func (b *Broker) Run() error {
 |---------------------------------------------------
 |
 |
- */
+*/
 
 func (b *Broker) runPublishPipeline() {
 	var prs []pubRequest
@@ -98,7 +96,7 @@ func (b *Broker) runPublishPipeline() {
 
 			for len(prs) < 512 {
 				select {
-				case msg := <- b.pubMessages:
+				case msg := <-b.pubMessages:
 					prs = append(prs, msg)
 				default:
 					break loop
@@ -125,7 +123,7 @@ func (b *Broker) runPublishPipeline() {
 |-------------------------------------------------
 |
 |
- */
+*/
 
 func (b *Broker) runPubSub() {
 	conn := b.pool.Get()
@@ -166,6 +164,7 @@ func (b *Broker) runPubSub() {
 	}()
 
 	// broadcasting new messages
+	log.Println("Workers")
 	for i := 0; i < b.Config.PubSubWorkers; i++ {
 		log.Println("message worker", i, "is up and running")
 		go func() {
@@ -215,15 +214,13 @@ func (b *Broker) runPubSub() {
 	}
 
 	// listening for new subMessages from pub/sub
-	go func() {
-		for {
-			switch m := psc.ReceiveWithTimeout(10 * time.Second).(type) {
-			case redis.Message:
-				b.subMessages <- m
-			case redis.Subscription:
-			}
+	for {
+		switch m := psc.ReceiveWithTimeout(10 * time.Second).(type) {
+		case redis.Message:
+			b.subMessages <- m
+		case redis.Subscription:
 		}
-	}()
+	}
 }
 
 // Subscribe ...
@@ -246,7 +243,7 @@ func (b *Broker) Unsubscribe(channels []string) {
 |--------------------------------------------------------
 |
 |
- */
+*/
 
 func (b *Broker) handlePublish(chId string, p *PublishRequest) {
 
@@ -273,7 +270,7 @@ func (b *Broker) handlePublish(chId string, p *PublishRequest) {
 
 }
 
-func (b *Broker) handleSubscribe(chId string, r *SubscribeRequest)  {
+func (b *Broker) handleSubscribe(chId string, r *SubscribeRequest) {
 
 	join := &Join{
 		Channel: r.Channel,
@@ -306,7 +303,7 @@ func (b *Broker) handleSubscribe(chId string, r *SubscribeRequest)  {
 	}
 }
 
-func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest)  {
+func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest) {
 
 	leave := &Leave{
 		Channel: r.Channel,
@@ -340,7 +337,6 @@ func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest)  {
 
 }
 
-
 /*
 |
 |
@@ -349,7 +345,7 @@ func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest)  {
 |---------------------------------------------------------
 |
 |
- */
+*/
 
 type pubRequest struct {
 	chId string

@@ -17,19 +17,19 @@ type Node struct {
 	mu         sync.RWMutex
 	uid        string
 	startedAt  int64
-	broker 	   *Broker
-	hub 	   *Hub
+	broker     *Broker
+	hub        *Hub
 	config     NodeConfig
 	nodes      *nodeRegistry
 	shutdown   bool
 	shutdownCh chan struct{}
 	logger     *logger
 	subLocks   map[int]*sync.Mutex
-	metrics *NodeMetrics
+	metrics    *NodeMetrics
 }
 
 type NodeMetrics struct {
-	clients int
+	clients  int
 	channels int
 }
 
@@ -39,6 +39,10 @@ const (
 
 func handleLog(e centrifuge.LogEntry) {
 	log.Printf("%s: %v", e.Message, e.Fields)
+}
+
+func (n *Node) notifyShutdown() chan struct{} {
+	return n.shutdownCh
 }
 
 // NewNode ...
@@ -61,7 +65,7 @@ func NewNode(c NodeConfig) *Node {
 			clients:  0,
 			channels: 0,
 		},
-		subLocks:   subLocks,
+		subLocks: subLocks,
 	}
 
 	n.broker = NewBroker()
@@ -89,7 +93,7 @@ func newNodeRegistry(currentUID string) *nodeRegistry {
 	}
 }
 
-func (node *Node) Run() error  {
+func (node *Node) Run() error {
 
 	err := node.broker.Run()
 	if err != nil {
@@ -105,7 +109,7 @@ func (node *Node) updateMetrics() {
 	ticker := time.NewTicker(time.Second * 10)
 	for {
 		select {
-		case <- ticker.C:
+		case <-ticker.C:
 			node.metrics.channels = node.hub.numConnections
 			node.metrics.clients = node.hub.numClients
 		}

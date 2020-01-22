@@ -1,21 +1,21 @@
 package main
 
-import protocol "github.com/sireax/Emmet-Go-Server/internal/proto"
+import protocol "github.com/sireax/emitted/internal/proto"
 
 type (
 	Raw = protocol.Raw
 
-	Error = protocol.Error
+	Error       = protocol.Error
 	Publication = protocol.Publication
-	Join = protocol.Join
-	Leave = protocol.Leave
-	Push = protocol.Push
+	Join        = protocol.Join
+	Leave       = protocol.Leave
+	Push        = protocol.Push
 
 	Command = protocol.Command
-	Reply = protocol.Reply
+	Reply   = protocol.Reply
 
-	PublishRequest = protocol.PublishRequest
-	SubscribeRequest = protocol.SubscribeRequest
+	PublishRequest     = protocol.PublishRequest
+	SubscribeRequest   = protocol.SubscribeRequest
 	UnsubscribeRequest = protocol.UnsubscribeRequest
 
 	ClientInfo = protocol.ClientInfo
@@ -23,13 +23,12 @@ type (
 
 const (
 	PushTypePublication = protocol.PushType_PUBLICATION
-	PushTypeJoin = protocol.PushType_JOIN
-	PushTypeLeave = protocol.PushType_LEAVE
+	PushTypeJoin        = protocol.PushType_JOIN
+	PushTypeLeave       = protocol.PushType_LEAVE
 
-	MethodTypePublish = protocol.MethodType_PUBLISH
-	MethodTypeSubscribe = protocol.MethodType_SUBSCRIBE
+	MethodTypePublish     = protocol.MethodType_PUBLISH
+	MethodTypeSubscribe   = protocol.MethodType_SUBSCRIBE
 	MethodTypeUnsubscribe = protocol.MethodType_UNSUBSCRIBE
-	MethodTypePresence = protocol.MethodType_PRESENCE
-	MethodTypePing = protocol.MethodType_PING
-
+	MethodTypePresence    = protocol.MethodType_PRESENCE
+	MethodTypePing        = protocol.MethodType_PING
 )

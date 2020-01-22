@@ -1,13 +1,11 @@
 package main
 
 import (
+	"gopkg.in/yaml.v2"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
-
-	"gopkg.in/yaml.v2"
 )
 
 // Service ...
@@ -48,7 +46,7 @@ func GetConfig() *Config {
 	_, dirname, _, _ := runtime.Caller(0)
 
 	filepath := filepath.Dir(dirname) + "/config.yml"
-	filepath = strings.Replace(filepath, "/", "\\", -1)
+	//filepath = strings.Replace(filepath, "/", "\\", -1)
 
 	f, err := os.Open(filepath)
 	defer f.Close()
@@ -64,4 +62,8 @@ func GetConfig() *Config {
 	}
 
 	return &cfg
+}
+
+func (c *Config) Validate() {
+
 }

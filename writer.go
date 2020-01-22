@@ -4,7 +4,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/sireax/Emmet-Go-Server/internal/queue"
+	"github.com/sireax/emitted/internal/queue"
 )
 
 type writerConfig struct {

@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/binary"
 	"io"
+	"log"
 )
 
 // PushDecoder ...
@@ -61,7 +62,6 @@ func (e *ProtobufPushDecoder) DecodeLeave(data []byte) (*Leave, error) {
 	return &m, nil
 }
 
-
 // CommandDecoder ...
 type CommandDecoder interface {
 	Reset([]byte) error
@@ -114,7 +114,6 @@ type ParamsDecoder interface {
 	DecodePing([]byte) (*PingRequest, error)
 }
 
-
 type ProtobufParamsDecoder struct{}
 
 func NewProtobufParamsDecoder() *ProtobufParamsDecoder {
@@ -124,8 +123,10 @@ func NewProtobufParamsDecoder() *ProtobufParamsDecoder {
 // DecodeSubscribe ...
 func (d *ProtobufParamsDecoder) DecodeSubscribe(data []byte) (*SubscribeRequest, error) {
 	var p SubscribeRequest
+	log.Println(data)
 	err := p.Unmarshal(data)
 	if err != nil {
+		log.Fatal(err)
 		return nil, err
 	}
 	return &p, nil
@@ -144,6 +145,7 @@ func (d *ProtobufParamsDecoder) DecodeUnsubscribe(data []byte) (*UnsubscribeRequ
 // DecodePublish ...
 func (d *ProtobufParamsDecoder) DecodePublish(data []byte) (*PublishRequest, error) {
 	var p PublishRequest
+	log.Println(string(data))
 	err := p.Unmarshal(data)
 	if err != nil {
 		return nil, err

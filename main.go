@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/bmizerany/pat"
-	"github.com/sireax/Emmet-Go-Server/internal/api"
+	"github.com/sireax/emitted/internal/api"
 )
 
 var (
@@ -37,7 +37,7 @@ var (
 		},
 	}
 
-	channel = NewChannel(app, "chat", &ChannelOptions{AllowClientMessages:true})
+	channel = NewChannel(app, "chat", &ChannelOptions{AllowClientMessages: true})
 
 	channel2 = NewChannel(app, "nofitications", &ChannelOptions{})
 )

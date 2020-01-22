@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"sync"
@@ -217,7 +218,12 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		closeCh := make(chan struct{}, 1)
 		transport := newWebsocketTransport(conn, opts, closeCh)
 
-		client := NewClient(transport)
+		context := context.Background()
+
+		client, err := NewClient(context, transport)
+		if err != nil {
+			return
+		}
 
 		client.Connect(app)
 
@@ -230,12 +236,12 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 		for {
 
-				_, data, err := conn.ReadMessage()
-				if err != nil {
-					return
-				}
+			_, data, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
 
-				client.Handle(data)
+			client.Handle(data)
 
 		}
 	}()
