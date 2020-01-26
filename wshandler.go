@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
@@ -88,7 +89,7 @@ func (t *websocketTransport) Write(data []byte) error {
 }
 
 // Close ...
-func (t *websocketTransport) Close(disconnect *Disconnect) {
+func (t *websocketTransport) Close(disconnect *Disconnect) error {
 	t.mu.Lock()
 	if t.closed {
 		t.mu.Unlock()
@@ -98,20 +99,22 @@ func (t *websocketTransport) Close(disconnect *Disconnect) {
 	t.mu.Unlock()
 
 	if disconnect != nil {
-		// reason, err := json.Marshal(disconnect)
-		// if err != nil {
-		// 	return err
-		// }
-		// msg := websocket.FormatCloseMessage(disconnect.Code, string(reason))
-		// err = t.conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(time.Second))
-		// if err != nil {
-		// 	return t.conn.Close()
-		// }
+		reason, err := json.Marshal(disconnect)
+		if err != nil {
+			return err
+		}
+		msg := websocket.FormatCloseMessage(disconnect.Code, string(reason))
+		err = t.conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(time.Second))
+		if err != nil {
+			return t.conn.Close()
+		}
 
 		// Wait for closing handshake completion.
 		t.conn.Close()
 	}
 	t.conn.Close()
+
+	return nil
 }
 
 const (
@@ -218,21 +221,18 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		closeCh := make(chan struct{}, 1)
 		transport := newWebsocketTransport(conn, opts, closeCh)
 
-		context := context.Background()
+		ctx := context.Background()
 
-		client, err := NewClient(context, transport)
+		client, err := NewClient(ctx, transport)
 		if err != nil {
 			return
 		}
 
 		client.Connect(app)
 
-		client.Subscribe(channel)
-		client.Subscribe(channel2)
-
-		//defer func() {
-		//	client.Close()
-		//}()
+		defer func() {
+			client.Close(nil)
+		}()
 
 		for {
 

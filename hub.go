@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"log"
+	"sync"
 )
 
 // Hub struct contains all data and structs of clients,channels etc.
 type Hub struct {
-	Apps           map[string]*App
+	mu             sync.RWMutex
+	apps           map[string]*App
+	conns          map[string]*Client
 	numConnections int
 	numClients     int
 }
@@ -16,7 +19,7 @@ type Hub struct {
 // NewHub is a constructor method for the Hub struct
 func NewHub() *Hub {
 	return &Hub{
-		Apps:           make(map[string]*App, 0),
+		apps:           make(map[string]*App, 0),
 		numClients:     0,
 		numConnections: 0,
 	}
@@ -24,15 +27,15 @@ func NewHub() *Hub {
 
 // AddApp ...
 func (hub *Hub) AddApp(app *App) {
-	_, ok := hub.Apps[app.Key]
+	_, ok := hub.apps[app.Key]
 	if !ok {
-		hub.Apps[app.Key] = app
+		hub.apps[app.Key] = app
 	}
 }
 
 // FindApp ...
 func (hub *Hub) FindApp(secret string) (*App, error) {
-	app, ok := hub.Apps[secret]
+	app, ok := hub.apps[secret]
 
 	if !ok {
 		return nil, errors.New("application is not found")
@@ -44,44 +47,84 @@ func (hub *Hub) FindApp(secret string) (*App, error) {
 // BroadcastMessage ...
 func (hub *Hub) BroadcastMessage(appKey string, channelName string, pub *Publication) {
 
-	for _, client := range hub.Apps[appKey].Channels[channelName].Clients {
-		payload, _ := pub.Marshal()
-		log.Println(payload)
+	data, err := pub.Marshal()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		client.messageWriter.enqueue(pub.Data)
+	push := &Push{
+		Type: PushTypePublication,
+		Data: data,
+	}
+
+	payload, err := push.Marshal()
+
+	for _, client := range hub.apps[appKey].Channels[channelName].Clients {
+		client.messageWriter.enqueue(payload)
 	}
 }
 
 func (hub *Hub) BroadcastJoin(appKey string, join *Join) {
-	for _, client := range hub.Apps[appKey].Clients {
+	data, err := join.Marshal()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		payload, err := join.Marshal()
-		if err != nil {
-			return
-		}
+	push := &Push{
+		Type: PushTypeJoin,
+		Data: data,
+	}
+
+	payload, err := push.Marshal()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, client := range hub.apps[appKey].Channels[join.Channel].Clients {
 		client.messageWriter.enqueue(payload)
 	}
 }
 
 func (hub *Hub) BroadcastLeave(appKey string, leave *Leave) {
-	for _, client := range hub.Apps[appKey].Clients {
+	data, err := leave.Marshal()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		payload, err := leave.Marshal()
-		if err != nil {
-			return
-		}
+	push := &Push{
+		Type: PushTypeLeave,
+		Data: data,
+	}
+
+	payload, err := push.Marshal()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, ok := hub.apps[appKey]
+	if !ok {
+		return
+	}
+
+	_, ok = hub.apps[appKey].Channels[leave.Channel]
+	if !ok {
+		return
+	}
+
+	for _, client := range hub.apps[appKey].Channels[leave.Channel].Clients {
 		client.messageWriter.enqueue(payload)
 	}
 }
 
 func (h *Hub) shutdown(ctx context.Context) error {
-	disconnect = DisconnectShutdown
-
-	clients := make([]*Client, 0, len(h.conns))
-	for _, client := range h.conns {
-		clients = append(clients, client)
-	}
-	h.mu.RUnlock()
-
-	h.mu.RLock()
+	//disconnect = DisconnectShutdown
+	//
+	//clients := make([]*Client, 0, len(h.conns))
+	//for _, client := range h.conns {
+	//	clients = append(clients, client)
+	//}
+	//h.mu.RUnlock()
+	//
+	//h.mu.RLock()
+	return nil
 }

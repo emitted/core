@@ -17,11 +17,6 @@ type PushDecoder interface {
 type ProtobufPushDecoder struct {
 }
 
-// NewProtobufPushDecoder ...
-func NewProtobufPushDecoder() *ProtobufPushDecoder {
-	return &ProtobufPushDecoder{}
-}
-
 // Decode ...
 func (e *ProtobufPushDecoder) Decode(data []byte) (*Push, error) {
 	var m Push
@@ -123,7 +118,6 @@ func NewProtobufParamsDecoder() *ProtobufParamsDecoder {
 // DecodeSubscribe ...
 func (d *ProtobufParamsDecoder) DecodeSubscribe(data []byte) (*SubscribeRequest, error) {
 	var p SubscribeRequest
-	log.Println(data)
 	err := p.Unmarshal(data)
 	if err != nil {
 		log.Fatal(err)

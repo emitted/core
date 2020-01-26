@@ -2,12 +2,6 @@ syntax = "proto3";
 
 package protocol;
 
-message Error {
-    uint32 code = 1;
-    string message = 2;
-
-}
-
 enum MethodType {
     SUBSCRIBE = 0;
     UNSUBSCRIBE = 1;
@@ -22,9 +16,16 @@ message Command {
     bytes data = 2;
 }
 
+message Error {
+    uint32 code = 1;
+    string message = 2;
+
+}
+
 message Reply {
-    Error reply = 1;
-    bytes result = 2;
+    uint32 id = 1;
+    Error error = 2;
+    bytes result = 3;
 }
 
 
@@ -80,4 +81,22 @@ message PingRequest {
 
 message PresenceRequest {
     string channel = 1;
+}
+
+message ConnectResult {
+    string client = 1;
+    string version = 2;
+    bool expires = 3;
+    bytes data = 4;
+}
+
+message SubscribeResult {
+    string channel = 1;
+}
+
+message UnsubscribeResult {
+}
+
+message PublishResult {
+
 }

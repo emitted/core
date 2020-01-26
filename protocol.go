@@ -19,6 +19,10 @@ type (
 	UnsubscribeRequest = protocol.UnsubscribeRequest
 
 	ClientInfo = protocol.ClientInfo
+
+	SubscribeResult   = protocol.SubscribeResult
+	UnsubscribeResult = protocol.UnsubscribeResult
+	PublishResult     = protocol.PublishResult
 )
 
 const (

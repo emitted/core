@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"github.com/sireax/emitted/internal/timers"
 	"log"
 	"time"
 
@@ -62,8 +64,6 @@ func (b *Broker) Run() error {
 }
 
 /*
-|
-|
 |---------------------------------------------------
 |	Publish pipeline
 |---------------------------------------------------
@@ -89,35 +89,40 @@ func (b *Broker) runPublishPipeline() {
 			}
 			conn.Close()
 
-		case msg := <-b.pubMessages:
-			prs = append(prs, msg)
+		case p := <-b.pubMessages:
+
+			prs = append(prs, p)
 
 		loop:
-
 			for len(prs) < 512 {
 				select {
-				case msg := <-b.pubMessages:
-					prs = append(prs, msg)
+				case pr := <-b.pubMessages:
+					prs = append(prs, pr)
 				default:
 					break loop
-				}
 
-				conn := node.broker.pool.Get()
-				for i := range prs {
-					err := conn.Send("PUBLISH", prs[i].chId, prs[i].data)
-					if err != nil {
-						log.Println("Failed publishing message: ", err)
-					}
 				}
 			}
+			conn := b.pool.Get()
+			for i := range prs {
+				conn.Send("PUBLISH", prs[i].chId, prs[i].data)
+			}
+			err := conn.Flush()
+			if err != nil {
+				for i := range prs {
+					prs[i].done(err)
+				}
+				conn.Close()
+				return
+			}
+			conn.Close()
+			prs = nil
 		}
 	}
 
 }
 
 /*
-|
-|
 |-------------------------------------------------
 |	Publish / Subscribe goroutines
 |-------------------------------------------------
@@ -144,7 +149,6 @@ func (b *Broker) runPubSub() {
 			case r := <-b.subCh:
 				if r.subscribe == true {
 					for _, channel := range r.channels {
-						log.Println(channel)
 						err := psc.Subscribe(channel)
 						if err != nil {
 							log.Fatal("error while subscribing to channel: ", err)
@@ -164,7 +168,6 @@ func (b *Broker) runPubSub() {
 	}()
 
 	// broadcasting new messages
-	log.Println("Workers")
 	for i := 0; i < b.Config.PubSubWorkers; i++ {
 		log.Println("message worker", i, "is up and running")
 		go func() {
@@ -179,7 +182,7 @@ func (b *Broker) runPubSub() {
 						var push Push
 						err := push.Unmarshal(message.Data)
 						if err != nil {
-							continue
+							log.Fatal(err)
 						}
 
 						appKey, channelName := parseChId(message.Channel)
@@ -187,24 +190,28 @@ func (b *Broker) runPubSub() {
 						switch push.Type {
 						case PushTypePublication:
 							var pub Publication
-							err := pub.Unmarshal(pub.Data)
+							err := pub.Unmarshal(push.Data)
 							if err != nil {
 								continue
 							}
+
 							node.hub.BroadcastMessage(appKey, channelName, &pub)
+
 						case PushTypeJoin:
 							var join Join
 							err := join.Unmarshal(push.Data)
 							if err != nil {
-								continue
+								log.Fatal(err)
 							}
+
 							node.hub.BroadcastJoin(appKey, &join)
 						case PushTypeLeave:
 							var leave Leave
 							err := leave.Unmarshal(push.Data)
 							if err != nil {
-								continue
+								log.Fatal(err)
 							}
+
 							node.hub.BroadcastLeave(appKey, &leave)
 						}
 					}
@@ -216,9 +223,10 @@ func (b *Broker) runPubSub() {
 	// listening for new subMessages from pub/sub
 	for {
 		switch m := psc.ReceiveWithTimeout(10 * time.Second).(type) {
+
+		case redis.Subscription:
 		case redis.Message:
 			b.subMessages <- m
-		case redis.Subscription:
 		}
 	}
 }
@@ -236,8 +244,6 @@ func (b *Broker) Unsubscribe(channels []string) {
 }
 
 /*
-|
-|
 |--------------------------------------------------------
 |	Client handlers
 |--------------------------------------------------------
@@ -245,104 +251,156 @@ func (b *Broker) Unsubscribe(channels []string) {
 |
 */
 
-func (b *Broker) handlePublish(chId string, p *PublishRequest) {
+func (b *Broker) handlePublish(chId string, c *Client, p *PublishRequest) error {
 
-	push := &Push{
-		Type: PushTypePublication,
+	publication := &Publication{
 		Data: p.Data,
+		Info: &ClientInfo{
+			Client: "random user",
+		},
 	}
 
-	bytesData, err := push.Marshal()
-	if err != nil {
-		return
-	}
-
-	pr := pubRequest{
-		chId: chId,
-		data: bytesData,
-	}
-
-	select {
-	case b.pubMessages <- pr:
-	default:
-
-	}
+	return b.Publish(chId, publication)
 
 }
 
-func (b *Broker) handleSubscribe(chId string, r *SubscribeRequest) {
+func (b *Broker) handleSubscribe(chId string, r *SubscribeRequest) error {
 
 	join := &Join{
 		Channel: r.Channel,
 	}
 
-	bytesData, err := join.Marshal()
-	if err != nil {
-		return
-	}
-
-	push := &Push{
-		Type: PushTypeJoin,
-		Data: bytesData,
-	}
-
-	bytePush, err := push.Marshal()
-	if err != nil {
-		return
-	}
-
-	pr := pubRequest{
-		chId: chId,
-		data: bytePush,
-	}
-
-	select {
-	case b.pubMessages <- pr:
-	default:
-
-	}
+	return b.PublishJoin(chId, join)
 }
 
-func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest) {
+func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest) error {
 
 	leave := &Leave{
 		Channel: r.Channel,
 	}
 
-	bytesData, err := leave.Marshal()
+	return b.PublishLeave(chId, leave)
+}
+
+/*
+|---------------------------------------------------------
+|	Publishers
+|---------------------------------------------------------
+|
+|
+*/
+
+func (b *Broker) Publish(chId string, publication *Publication) error {
+
+	bytes, err := publication.Marshal()
 	if err != nil {
-		return
+		return err
 	}
 
 	push := &Push{
-		Type: PushTypeLeave,
-		Data: bytesData,
+		Type: PushTypePublication,
+		Data: bytes,
 	}
 
-	bytesPush, err := push.Marshal()
+	payload, err := push.Marshal()
 	if err != nil {
-		return
+		return err
 	}
 
 	pr := pubRequest{
 		chId: chId,
-		data: bytesPush,
+		data: payload,
 	}
 
 	select {
 	case b.pubMessages <- pr:
 	default:
-
+		timer := timers.AcquireTimer(time.Second)
+		defer timers.ReleaseTimer(timer)
+		select {
+		case b.pubMessages <- pr:
+		case <-timer.C:
+			return errors.New("redis timeout")
+		}
 	}
 
+	return nil
+}
+
+func (b *Broker) PublishJoin(chId string, join *Join) error {
+
+	bytes, err := join.Marshal()
+	if err != nil {
+		return err
+	}
+
+	push := &Push{
+		Type: PushTypeJoin,
+		Data: bytes,
+	}
+
+	payload, err := push.Marshal()
+	if err != nil {
+		return err
+	}
+
+	pr := pubRequest{
+		chId: chId,
+		data: payload,
+	}
+
+	select {
+	case b.pubMessages <- pr:
+	default:
+		timer := timers.AcquireTimer(time.Second)
+		defer timers.ReleaseTimer(timer)
+		select {
+		case b.pubMessages <- pr:
+		case <-timer.C:
+			return errors.New("redis timeout")
+		}
+	}
+
+	return nil
+}
+
+func (b *Broker) PublishLeave(chId string, leave *Leave) error {
+
+	bytes, err := leave.Marshal()
+	if err != nil {
+		return err
+	}
+
+	push := &Push{
+		Type: PushTypeLeave,
+		Data: bytes,
+	}
+
+	payload, _ := push.Marshal()
+
+	pr := pubRequest{
+		chId: chId,
+		data: payload,
+	}
+
+	select {
+	case b.pubMessages <- pr:
+	default:
+		timer := timers.AcquireTimer(time.Second)
+		defer timers.ReleaseTimer(timer)
+		select {
+		case b.pubMessages <- pr:
+		case <-timer.C:
+			return errors.New("redis timeout")
+		}
+	}
+	return nil
 }
 
 /*
-|
-|
-|---------------------------------------------------------
+|-----------------------------------
 |	Broker requests
-|---------------------------------------------------------
+|-----------------------------------
 |
 |
 */
@@ -350,6 +408,10 @@ func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest) {
 type pubRequest struct {
 	chId string
 	data []byte
+}
+
+func (r pubRequest) done(err error) {
+
 }
 
 type subRequest struct {

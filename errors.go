@@ -26,21 +26,26 @@ var (
 		Code:    104,
 		Message: "already subscribed",
 	}
+
+	ErrorChannelNotFound = &Error{
+		Code:    105,
+		Message: "client is not subscribed to the channel",
+	}
 	// ErrorLimitExceeded says that some sort of limit exceeded, server logs should
 	// give more detailed information.
 	ErrorMessageLimitExceeded = &Error{
-		Code:    105,
+		Code:    106,
 		Message: "limit exceeded",
 	}
 	// give more detailed information.
 	ErrorConnectionLimitExceeded = &Error{
-		Code:    106,
+		Code:    107,
 		Message: "limit exceeded",
 	}
 	// ErrorBadRequest says that server can not process received
 	// data because it is malformed.
 	ErrorBadRequest = &Error{
-		Code:    107,
+		Code:    108,
 		Message: "bad request",
 	}
 )

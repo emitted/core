@@ -1,9 +1,15 @@
 package main
 
+import (
+	"errors"
+	"sync"
+)
+
 // app structure represents client's application that allows to easily manage channels
 
 // AppOptions ...
 type AppOptions struct {
+	mu             sync.Mutex
 	MaxConnections int
 }
 
@@ -24,45 +30,43 @@ type App struct {
 	Stats    *AppStats
 }
 
-// Subscribe ...
-func (app *App) Subscribe(channel *Channel) bool {
-	isFirst := false
-	_, ok := app.Channels[channel.Name]
+func (app *App) addSub(ch string, c *Client) bool {
 
+	first := false
+	_, ok := app.Channels[ch]
 	if !ok {
-		isFirst = true
-		app.Channels[channel.Name] = channel
+		first = true
+		channel := &Channel{
+			Name:    ch,
+			App:     app,
+			Clients: map[uint32]*Client{},
+			Stats:   &ChannelStats{Connections: 0, Messages: 0},
+		}
+		app.Channels[ch] = channel
 	}
 
-	return isFirst
+	app.Channels[ch].Clients[c.uid] = c
+
+	return first
 }
 
-func (app *App) addSub(ch string, c *Client) bool  {
-
-	app.Clients[c.uid] = c
-
-	if _, ok := app.Channels[ch]; ok {
-		return true
-	}
-
-	return false
-}
-
-func (app *App) removeSub(ch string, c *Client) bool  {
+func (app *App) removeSub(ch string, c *Client) (bool, error) {
 
 	if _, ok := app.Channels[ch]; !ok {
-		return true
+		return false, errors.New("channel does not exist")
 	}
 
-	if _, ok := app.Channels[ch].Clients[c.uid]; !ok {
-		return true
-	}
+	lastClient := false
 
 	delete(app.Channels[ch].Clients, c.uid)
+
+	if len(app.Channels[ch].Clients) == 0 {
+		lastClient = true
+	}
 
 	if len(app.Channels[ch].Clients) == 0 {
 		delete(app.Channels, ch)
 	}
 
-	return false
+	return lastClient, nil
 }

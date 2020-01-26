@@ -72,10 +72,8 @@ func (w *writer) runWriteRoutine() {
 			if len(msgs) > 0 {
 				w.mu.Lock()
 				if len(msgs) == 1 {
-					log.Println(msgs[0])
 					w.config.WriteFn(msgs[0])
 				} else {
-					log.Println(msgs)
 					w.config.WriteManyFn(msgs...)
 				}
 				w.mu.Unlock()

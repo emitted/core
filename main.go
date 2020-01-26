@@ -36,10 +36,6 @@ var (
 			Messages:    0,
 		},
 	}
-
-	channel = NewChannel(app, "chat", &ChannelOptions{AllowClientMessages: true})
-
-	channel2 = NewChannel(app, "nofitications", &ChannelOptions{})
 )
 
 func main() {
