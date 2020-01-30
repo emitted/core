@@ -21,7 +21,10 @@ type Client struct {
 	authenticated bool
 	closed        bool
 
-	uid      uint32
+	uid     string
+	client  string
+	version string
+
 	app      *App
 	channels map[string]*Channel
 
@@ -41,7 +44,7 @@ type Client struct {
 // NewClient ...
 func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 
-	uuid := rand.Uint32()
+	uuid := string(rand.Uint32())
 
 	client := &Client{
 		ctx:           ctx,
@@ -57,7 +60,8 @@ func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 		WriteFn: func(data []byte) error {
 			err := client.transport.Write(data)
 			if err != nil {
-				log.Fatalln(err)
+				client.Close(DisconnectWriteError)
+				//	todo: log this
 			}
 			return nil
 		},
@@ -65,7 +69,7 @@ func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 			for _, payload := range data {
 				err := client.transport.Write(payload)
 				if err != nil {
-					log.Fatalln(err)
+					client.Close(DisconnectWriteError)
 				}
 			}
 			return nil
@@ -75,11 +79,25 @@ func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 	// Setting client's message writer
 	client.messageWriter = newWriter(messageWriterConf)
 
-	//if !client.authenticated {
-	//	client.staleTimer = time.AfterFunc(time.Second * 5, client.CloseUnauthenticated)
-	//}
+	if !client.authenticated {
+		client.staleTimer = time.AfterFunc(time.Second*5, client.CloseUnauthenticated)
+	}
 
 	return client, nil
+}
+
+func (c *Client) clientInfo(ch string) *ClientInfo {
+	channel, ok := c.channels[ch]
+	if !ok {
+		return nil
+	}
+
+	info, ok := channel.Info[c.uid]
+	if !ok {
+		return nil
+	}
+
+	return info
 }
 
 func (c *Client) CloseUnauthenticated() {
@@ -131,7 +149,7 @@ func (c *Client) Unsubscribe(ch string) {
 		leave := &Leave{
 			Channel: ch,
 			Info: &ClientInfo{
-				Client: "lox",
+				Id: "lox",
 			},
 		}
 
@@ -202,10 +220,16 @@ func (c *Client) Close(disconnect *Disconnect) {
 		c.expireTimer.Stop()
 	}
 
-	c.messageWriter.close()
+	err := c.messageWriter.close()
+	if err != nil {
+		//	todo: log this
+	}
 	delete(c.app.Clients, c.uid)
 
-	c.transport.Close(disconnect)
+	err = c.transport.Close(disconnect)
+	if err != nil {
+		//	todo: log this
+	}
 }
 
 /*
@@ -283,6 +307,8 @@ func (c *Client) HandleCommand(cmd *Command) *Disconnect {
 	rw := &replyWriter{write}
 
 	switch cmd.Type {
+	case MethodTypeConnect:
+		disconnect = c.handleConnect(cmd.Data, rw)
 	case MethodTypeSubscribe:
 		disconnect = c.handleSubscribe(cmd.Data, rw)
 	case MethodTypeUnsubscribe:
@@ -291,6 +317,61 @@ func (c *Client) HandleCommand(cmd *Command) *Disconnect {
 		disconnect = c.handlePublish(cmd.Data, rw)
 	case MethodTypePresence:
 		disconnect = c.handlePresence(cmd.Data, rw)
+	}
+
+	return disconnect
+}
+
+func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
+	var disconnect *Disconnect
+
+	p, err := protocol.NewProtobufParamsDecoder().DecodeConnect(data)
+	if err != nil {
+		return DisconnectBadRequest
+	}
+
+	if p.Version == "" {
+		err := rw.write(&Reply{
+			Error: ErrorBadRequest,
+		})
+		if err != nil {
+			return DisconnectServerError
+		}
+
+		return nil
+	}
+
+	c.mu.RLock()
+	c.authenticated = true
+	switch p.Client {
+	case ClientTypeJs:
+		c.client = "js"
+	case ClientTypeSwift:
+		c.client = "swift"
+	default:
+		return DisconnectBadRequest
+	}
+
+	c.version = p.Version
+
+	c.staleTimer.Stop()
+
+	c.expireTimer = time.AfterFunc(time.Hour, c.Expire)
+	c.mu.Unlock()
+
+	expires := time.Now().Add(time.Hour).Unix()
+
+	res := &ConnectResult{
+		Uid:     c.uid,
+		Expires: expires,
+	}
+	bytesRes, _ := res.Marshal()
+
+	err = rw.write(&Reply{
+		Result: bytesRes,
+	})
+	if err != nil {
+		return DisconnectServerError
 	}
 
 	return disconnect
@@ -315,6 +396,52 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return nil
 	}
 
+	var clientInfo *ClientInfo
+
+	switch getChannelType(p.Channel) {
+	case "private":
+
+		signature := generateSignature(c.app.Key, c.uid, p.Channel)
+
+		ok := verifySignature(signature, p.Signature)
+		if !ok {
+			err := rw.write(&Reply{
+				Error: ErrorInvalidSignature,
+			})
+			if err != nil {
+				return DisconnectServerError
+			}
+			return nil
+		}
+
+	case "presence":
+
+		signature := generateSignature(c.app.Key, c.uid, p.Channel)
+
+		ok := verifySignature(signature, p.Signature)
+		if !ok {
+			err := rw.write(&Reply{
+				Error: ErrorInvalidSignature,
+			})
+			if err != nil {
+				return DisconnectServerError
+			}
+		}
+
+		err := clientInfo.Unmarshal(p.Data)
+		if err != nil {
+			err := rw.write(&Reply{
+				Error: ErrorBadRequest,
+			})
+			if err != nil {
+				return DisconnectServerError
+			}
+			return nil
+		}
+
+	default:
+	}
+
 	_, ok := c.channels[p.Channel]
 	if ok {
 		err := rw.write(&Reply{
@@ -327,7 +454,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return nil
 	}
 
-	first := c.app.addSub(p.Channel, c)
+	first := c.app.addSub(p.Channel, c, clientInfo)
 	chId := makeChId(c.app.Key, p.Channel)
 
 	if first {
@@ -461,11 +588,47 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 
 	var disconnect *Disconnect
 
-	_, err := protocol.NewProtobufParamsDecoder().DecodePresence(data)
+	p, err := protocol.NewProtobufParamsDecoder().DecodePresence(data)
 	if err != nil {
-		disconnect = DisconnectBadRequest
+		return DisconnectBadRequest
 	}
 
+	if p.Channel == "" {
+		err := rw.write(&Reply{
+			Error: ErrorBadRequest,
+		})
+		if err != nil {
+			return DisconnectServerError
+		}
+	}
+
+	ch, ok := c.channels[p.Channel]
+	if !ok {
+		err := rw.write(&Reply{
+			Error: ErrorPermissionDenied,
+		})
+		if err != nil {
+			return DisconnectServerError
+		}
+	}
+
+	presence := make(map[string]*ClientInfo, len(ch.Info))
+
+	for uid, info := range ch.Info {
+		presence[uid] = info
+	}
+
+	presenceRes := &PresenceResult{
+		Presence: presence,
+	}
+	bytesResult, _ := presenceRes.Marshal()
+
+	err = rw.write(&Reply{
+		Result: bytesResult,
+	})
+	if err != nil {
+		return DisconnectServerError
+	}
 	return disconnect
 
 }

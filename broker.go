@@ -256,7 +256,7 @@ func (b *Broker) handlePublish(chId string, c *Client, p *PublishRequest) error 
 	publication := &Publication{
 		Data: p.Data,
 		Info: &ClientInfo{
-			Client: "random user",
+			Id: "random user",
 		},
 	}
 

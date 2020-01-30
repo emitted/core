@@ -48,4 +48,9 @@ var (
 		Code:    108,
 		Message: "bad request",
 	}
+
+	ErrorInvalidSignature = &Error{
+		Code:    109,
+		Message: "invalid signature provided",
+	}
 )

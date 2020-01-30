@@ -3,11 +3,11 @@ syntax = "proto3";
 package protocol;
 
 enum MethodType {
-    SUBSCRIBE = 0;
-    UNSUBSCRIBE = 1;
-    PUBLISH = 2;
-    PRESENCE = 3;
-    PRESENCE_STATS = 4;
+    CONNECT = 0;
+    SUBSCRIBE = 1;
+    UNSUBSCRIBE = 2;
+    PUBLISH = 3;
+    PRESENCE = 4;
     PING = 5;
 }
 
@@ -42,10 +42,8 @@ message Push {
 }
 
 message ClientInfo {
-    string user = 1;
-    string client = 2;
-    bytes conn_info = 3;
-    bytes chan_info = 4;
+    string id = 1;
+    bytes  info = 2;
 }
 
 message Publication {
@@ -65,6 +63,8 @@ message Leave {
 
 message SubscribeRequest {
     string channel = 1;
+    string signature = 2;
+    bytes data = 3;
 }
 
 message UnsubscribeRequest {
@@ -76,17 +76,23 @@ message PublishRequest {
     bytes data = 2;
 }
 
+enum ClientType {
+    JS = 0;
+    SWIFT = 1;
+}
+
+message ConnectRequest {
+    ClientType client = 1;
+    string version = 2;
+    bytes data = 3;
+}
+
 message PingRequest {
 }
 
-message PresenceRequest {
-    string channel = 1;
-}
-
 message ConnectResult {
-    string client = 1;
-    string version = 2;
-    bool expires = 3;
+    string uid = 1;
+    int64 expires = 3;
     bytes data = 4;
 }
 
@@ -98,5 +104,12 @@ message UnsubscribeResult {
 }
 
 message PublishResult {
+}
 
+message PresenceRequest {
+    string channel = 1;
+}
+
+message PresenceResult {
+    map<string, ClientInfo> presence = 1;
 }

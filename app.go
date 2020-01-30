@@ -24,13 +24,13 @@ type App struct {
 	Key      string
 	Secret   string
 	Cluster  string
-	Clients  map[uint32]*Client
+	Clients  map[string]*Client
 	Channels map[string]*Channel
 	Options  *AppOptions
 	Stats    *AppStats
 }
 
-func (app *App) addSub(ch string, c *Client) bool {
+func (app *App) addSub(ch string, c *Client, info *ClientInfo) bool {
 
 	first := false
 	_, ok := app.Channels[ch]
@@ -39,13 +39,18 @@ func (app *App) addSub(ch string, c *Client) bool {
 		channel := &Channel{
 			Name:    ch,
 			App:     app,
-			Clients: map[uint32]*Client{},
+			Clients: map[string]*Client{},
+			Info:    make(map[string]*ClientInfo),
 			Stats:   &ChannelStats{Connections: 0, Messages: 0},
 		}
 		app.Channels[ch] = channel
 	}
 
 	app.Channels[ch].Clients[c.uid] = c
+
+	if info != nil {
+		app.Channels[ch].Info[c.uid] = info
+	}
 
 	return first
 }

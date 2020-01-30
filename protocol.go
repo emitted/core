@@ -17,12 +17,16 @@ type (
 	PublishRequest     = protocol.PublishRequest
 	SubscribeRequest   = protocol.SubscribeRequest
 	UnsubscribeRequest = protocol.UnsubscribeRequest
+	PresenceRequest    = protocol.PresenceRequest
+	ConnectRequest     = protocol.ConnectRequest
 
 	ClientInfo = protocol.ClientInfo
 
 	SubscribeResult   = protocol.SubscribeResult
 	UnsubscribeResult = protocol.UnsubscribeResult
 	PublishResult     = protocol.PublishResult
+	PresenceResult    = protocol.PresenceResult
+	ConnectResult     = protocol.ConnectResult
 )
 
 const (
@@ -30,6 +34,10 @@ const (
 	PushTypeJoin        = protocol.PushType_JOIN
 	PushTypeLeave       = protocol.PushType_LEAVE
 
+	ClientTypeJs    = protocol.ClientType_JS
+	ClientTypeSwift = protocol.ClientType_SWIFT
+
+	MethodTypeConnect     = protocol.MethodType_CONNECT
 	MethodTypePublish     = protocol.MethodType_PUBLISH
 	MethodTypeSubscribe   = protocol.MethodType_SUBSCRIBE
 	MethodTypeUnsubscribe = protocol.MethodType_UNSUBSCRIBE

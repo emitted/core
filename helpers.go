@@ -14,7 +14,7 @@ func parseChId(id string) (string, string) {
 	return appKey, channelName
 }
 
-func makeChId(appKey string, chName string) string  {
+func makeChId(appKey string, chName string) string {
 	return appKey + ":" + chName
 }
 
@@ -27,7 +27,19 @@ func ChannelID(key string) string {
 	}
 }
 
-func runForever(fn func())  {
+func getChannelType(ch string) string {
+
+	switch true {
+	case strings.HasPrefix(ch, "private"):
+		return "private"
+	case strings.HasPrefix(ch, "presence"):
+		return "presence"
+	default:
+		return "regular"
+	}
+}
+
+func runForever(fn func()) {
 	for {
 		fn()
 

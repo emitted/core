@@ -127,10 +127,5 @@ func (n *Node) Shutdown(ctx context.Context) error {
 	close(n.shutdownCh)
 	n.mu.Unlock()
 
-	err := node.hub.shutdown(ctx)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return node.hub.shutdown(ctx)
 }

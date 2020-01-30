@@ -117,14 +117,44 @@ func (hub *Hub) BroadcastLeave(appKey string, leave *Leave) {
 }
 
 func (h *Hub) shutdown(ctx context.Context) error {
-	//disconnect = DisconnectShutdown
-	//
-	//clients := make([]*Client, 0, len(h.conns))
-	//for _, client := range h.conns {
-	//	clients = append(clients, client)
-	//}
-	//h.mu.RUnlock()
-	//
-	//h.mu.RLock()
-	return nil
+	advice := DisconnectShutdown
+
+	sem := make(chan struct{}, 128)
+
+	clients := make([]*Client, 0, len(h.conns))
+	for _, client := range h.conns {
+		clients = append(clients, client)
+	}
+
+	closeFinishedCh := make(chan struct{}, len(clients))
+	finished := 0
+
+	if len(clients) == 0 {
+		return nil
+	}
+
+	for _, client := range clients {
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		go func(cc *Client) {
+			defer func() { <-sem }()
+			defer func() { closeFinishedCh <- struct{}{} }()
+			cc.Close(advice)
+		}(client)
+	}
+
+	for {
+		select {
+		case <-closeFinishedCh:
+			finished++
+			if finished == len(clients) {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }

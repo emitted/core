@@ -115,6 +115,17 @@ func NewProtobufParamsDecoder() *ProtobufParamsDecoder {
 	return &ProtobufParamsDecoder{}
 }
 
+func (d *ProtobufParamsDecoder) DecodeConnect(data []byte) (*ConnectRequest, error) {
+	var p ConnectRequest
+	if data != nil {
+		err := p.Unmarshal(data)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &p, nil
+}
+
 // DecodeSubscribe ...
 func (d *ProtobufParamsDecoder) DecodeSubscribe(data []byte) (*SubscribeRequest, error) {
 	var p SubscribeRequest

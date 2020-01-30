@@ -25,30 +25,30 @@ const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 type MethodType int32
 
 const (
-	MethodType_SUBSCRIBE      MethodType = 0
-	MethodType_UNSUBSCRIBE    MethodType = 1
-	MethodType_PUBLISH        MethodType = 2
-	MethodType_PRESENCE       MethodType = 3
-	MethodType_PRESENCE_STATS MethodType = 4
-	MethodType_PING           MethodType = 5
+	MethodType_CONNECT     MethodType = 0
+	MethodType_SUBSCRIBE   MethodType = 1
+	MethodType_UNSUBSCRIBE MethodType = 2
+	MethodType_PUBLISH     MethodType = 3
+	MethodType_PRESENCE    MethodType = 4
+	MethodType_PING        MethodType = 5
 )
 
 var MethodType_name = map[int32]string{
-	0: "SUBSCRIBE",
-	1: "UNSUBSCRIBE",
-	2: "PUBLISH",
-	3: "PRESENCE",
-	4: "PRESENCE_STATS",
+	0: "CONNECT",
+	1: "SUBSCRIBE",
+	2: "UNSUBSCRIBE",
+	3: "PUBLISH",
+	4: "PRESENCE",
 	5: "PING",
 }
 
 var MethodType_value = map[string]int32{
-	"SUBSCRIBE":      0,
-	"UNSUBSCRIBE":    1,
-	"PUBLISH":        2,
-	"PRESENCE":       3,
-	"PRESENCE_STATS": 4,
-	"PING":           5,
+	"CONNECT":     0,
+	"SUBSCRIBE":   1,
+	"UNSUBSCRIBE": 2,
+	"PUBLISH":     3,
+	"PRESENCE":    4,
+	"PING":        5,
 }
 
 func (x MethodType) String() string {
@@ -88,6 +88,31 @@ func (x PushType) String() string {
 
 func (PushType) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_014de31d7ac8c57c, []int{1}
+}
+
+type ClientType int32
+
+const (
+	ClientType_JS    ClientType = 0
+	ClientType_SWIFT ClientType = 1
+)
+
+var ClientType_name = map[int32]string{
+	0: "JS",
+	1: "SWIFT",
+}
+
+var ClientType_value = map[string]int32{
+	"JS":    0,
+	"SWIFT": 1,
+}
+
+func (x ClientType) String() string {
+	return proto.EnumName(ClientType_name, int32(x))
+}
+
+func (ClientType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_014de31d7ac8c57c, []int{2}
 }
 
 type Command struct {
@@ -135,7 +160,7 @@ func (m *Command) GetType() MethodType {
 	if m != nil {
 		return m.Type
 	}
-	return MethodType_SUBSCRIBE
+	return MethodType_CONNECT
 }
 
 func (m *Command) GetData() []byte {
@@ -319,10 +344,8 @@ func (m *Push) GetData() []byte {
 }
 
 type ClientInfo struct {
-	User                 string   `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
-	Client               string   `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
-	ConnInfo             []byte   `protobuf:"bytes,3,opt,name=conn_info,json=connInfo,proto3" json:"conn_info,omitempty"`
-	ChanInfo             []byte   `protobuf:"bytes,4,opt,name=chan_info,json=chanInfo,proto3" json:"chan_info,omitempty"`
+	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Info                 []byte   `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -361,30 +384,16 @@ func (m *ClientInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ClientInfo proto.InternalMessageInfo
 
-func (m *ClientInfo) GetUser() string {
+func (m *ClientInfo) GetId() string {
 	if m != nil {
-		return m.User
+		return m.Id
 	}
 	return ""
 }
 
-func (m *ClientInfo) GetClient() string {
+func (m *ClientInfo) GetInfo() []byte {
 	if m != nil {
-		return m.Client
-	}
-	return ""
-}
-
-func (m *ClientInfo) GetConnInfo() []byte {
-	if m != nil {
-		return m.ConnInfo
-	}
-	return nil
-}
-
-func (m *ClientInfo) GetChanInfo() []byte {
-	if m != nil {
-		return m.ChanInfo
+		return m.Info
 	}
 	return nil
 }
@@ -556,6 +565,8 @@ func (m *Leave) GetInfo() *ClientInfo {
 
 type SubscribeRequest struct {
 	Channel              string   `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	Signature            string   `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	Data                 []byte   `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -599,6 +610,20 @@ func (m *SubscribeRequest) GetChannel() string {
 		return m.Channel
 	}
 	return ""
+}
+
+func (m *SubscribeRequest) GetSignature() string {
+	if m != nil {
+		return m.Signature
+	}
+	return ""
+}
+
+func (m *SubscribeRequest) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
 }
 
 type UnsubscribeRequest struct {
@@ -703,6 +728,69 @@ func (m *PublishRequest) GetData() []byte {
 	return nil
 }
 
+type ConnectRequest struct {
+	Client               ClientType `protobuf:"varint,1,opt,name=client,proto3,enum=protocol.ClientType" json:"client,omitempty"`
+	Version              string     `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Data                 []byte     `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
+	XXX_unrecognized     []byte     `json:"-"`
+	XXX_sizecache        int32      `json:"-"`
+}
+
+func (m *ConnectRequest) Reset()         { *m = ConnectRequest{} }
+func (m *ConnectRequest) String() string { return proto.CompactTextString(m) }
+func (*ConnectRequest) ProtoMessage()    {}
+func (*ConnectRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_014de31d7ac8c57c, []int{11}
+}
+func (m *ConnectRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ConnectRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ConnectRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ConnectRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ConnectRequest.Merge(m, src)
+}
+func (m *ConnectRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ConnectRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ConnectRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ConnectRequest proto.InternalMessageInfo
+
+func (m *ConnectRequest) GetClient() ClientType {
+	if m != nil {
+		return m.Client
+	}
+	return ClientType_JS
+}
+
+func (m *ConnectRequest) GetVersion() string {
+	if m != nil {
+		return m.Version
+	}
+	return ""
+}
+
+func (m *ConnectRequest) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
 type PingRequest struct {
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -713,7 +801,7 @@ func (m *PingRequest) Reset()         { *m = PingRequest{} }
 func (m *PingRequest) String() string { return proto.CompactTextString(m) }
 func (*PingRequest) ProtoMessage()    {}
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_014de31d7ac8c57c, []int{11}
+	return fileDescriptor_014de31d7ac8c57c, []int{12}
 }
 func (m *PingRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -742,57 +830,9 @@ func (m *PingRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_PingRequest proto.InternalMessageInfo
 
-type PresenceRequest struct {
-	Channel              string   `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *PresenceRequest) Reset()         { *m = PresenceRequest{} }
-func (m *PresenceRequest) String() string { return proto.CompactTextString(m) }
-func (*PresenceRequest) ProtoMessage()    {}
-func (*PresenceRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_014de31d7ac8c57c, []int{12}
-}
-func (m *PresenceRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *PresenceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_PresenceRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *PresenceRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PresenceRequest.Merge(m, src)
-}
-func (m *PresenceRequest) XXX_Size() int {
-	return m.Size()
-}
-func (m *PresenceRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_PresenceRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_PresenceRequest proto.InternalMessageInfo
-
-func (m *PresenceRequest) GetChannel() string {
-	if m != nil {
-		return m.Channel
-	}
-	return ""
-}
-
 type ConnectResult struct {
-	Client               string   `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
-	Version              string   `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	Expires              bool     `protobuf:"varint,3,opt,name=expires,proto3" json:"expires,omitempty"`
+	Uid                  string   `protobuf:"bytes,1,opt,name=uid,proto3" json:"uid,omitempty"`
+	Expires              int64    `protobuf:"varint,3,opt,name=expires,proto3" json:"expires,omitempty"`
 	Data                 []byte   `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -832,25 +872,18 @@ func (m *ConnectResult) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ConnectResult proto.InternalMessageInfo
 
-func (m *ConnectResult) GetClient() string {
+func (m *ConnectResult) GetUid() string {
 	if m != nil {
-		return m.Client
+		return m.Uid
 	}
 	return ""
 }
 
-func (m *ConnectResult) GetVersion() string {
-	if m != nil {
-		return m.Version
-	}
-	return ""
-}
-
-func (m *ConnectResult) GetExpires() bool {
+func (m *ConnectResult) GetExpires() int64 {
 	if m != nil {
 		return m.Expires
 	}
-	return false
+	return 0
 }
 
 func (m *ConnectResult) GetData() []byte {
@@ -985,9 +1018,104 @@ func (m *PublishResult) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_PublishResult proto.InternalMessageInfo
 
+type PresenceRequest struct {
+	Channel              string   `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PresenceRequest) Reset()         { *m = PresenceRequest{} }
+func (m *PresenceRequest) String() string { return proto.CompactTextString(m) }
+func (*PresenceRequest) ProtoMessage()    {}
+func (*PresenceRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_014de31d7ac8c57c, []int{17}
+}
+func (m *PresenceRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PresenceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PresenceRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PresenceRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PresenceRequest.Merge(m, src)
+}
+func (m *PresenceRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *PresenceRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PresenceRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PresenceRequest proto.InternalMessageInfo
+
+func (m *PresenceRequest) GetChannel() string {
+	if m != nil {
+		return m.Channel
+	}
+	return ""
+}
+
+type PresenceResult struct {
+	Presence             map[string]*ClientInfo `protobuf:"bytes,1,rep,name=presence,proto3" json:"presence,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
+	XXX_unrecognized     []byte                 `json:"-"`
+	XXX_sizecache        int32                  `json:"-"`
+}
+
+func (m *PresenceResult) Reset()         { *m = PresenceResult{} }
+func (m *PresenceResult) String() string { return proto.CompactTextString(m) }
+func (*PresenceResult) ProtoMessage()    {}
+func (*PresenceResult) Descriptor() ([]byte, []int) {
+	return fileDescriptor_014de31d7ac8c57c, []int{18}
+}
+func (m *PresenceResult) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PresenceResult) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PresenceResult.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PresenceResult) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PresenceResult.Merge(m, src)
+}
+func (m *PresenceResult) XXX_Size() int {
+	return m.Size()
+}
+func (m *PresenceResult) XXX_DiscardUnknown() {
+	xxx_messageInfo_PresenceResult.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PresenceResult proto.InternalMessageInfo
+
+func (m *PresenceResult) GetPresence() map[string]*ClientInfo {
+	if m != nil {
+		return m.Presence
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterEnum("protocol.MethodType", MethodType_name, MethodType_value)
 	proto.RegisterEnum("protocol.PushType", PushType_name, PushType_value)
+	proto.RegisterEnum("protocol.ClientType", ClientType_name, ClientType_value)
 	proto.RegisterType((*Command)(nil), "protocol.Command")
 	proto.RegisterType((*Error)(nil), "protocol.Error")
 	proto.RegisterType((*Reply)(nil), "protocol.Reply")
@@ -999,56 +1127,64 @@ func init() {
 	proto.RegisterType((*SubscribeRequest)(nil), "protocol.SubscribeRequest")
 	proto.RegisterType((*UnsubscribeRequest)(nil), "protocol.UnsubscribeRequest")
 	proto.RegisterType((*PublishRequest)(nil), "protocol.PublishRequest")
+	proto.RegisterType((*ConnectRequest)(nil), "protocol.ConnectRequest")
 	proto.RegisterType((*PingRequest)(nil), "protocol.PingRequest")
-	proto.RegisterType((*PresenceRequest)(nil), "protocol.PresenceRequest")
 	proto.RegisterType((*ConnectResult)(nil), "protocol.ConnectResult")
 	proto.RegisterType((*SubscribeResult)(nil), "protocol.SubscribeResult")
 	proto.RegisterType((*UnsubscribeResult)(nil), "protocol.UnsubscribeResult")
 	proto.RegisterType((*PublishResult)(nil), "protocol.PublishResult")
+	proto.RegisterType((*PresenceRequest)(nil), "protocol.PresenceRequest")
+	proto.RegisterType((*PresenceResult)(nil), "protocol.PresenceResult")
+	proto.RegisterMapType((map[string]*ClientInfo)(nil), "protocol.PresenceResult.PresenceEntry")
 }
 
 func init() { proto.RegisterFile("client.proto", fileDescriptor_014de31d7ac8c57c) }
 
 var fileDescriptor_014de31d7ac8c57c = []byte{
-	// 594 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x53, 0xd1, 0x6a, 0xdb, 0x4a,
-	0x10, 0x8d, 0x1c, 0x29, 0x96, 0xc7, 0xb1, 0xad, 0xbb, 0xb7, 0x14, 0x43, 0xc1, 0x04, 0x41, 0x8b,
-	0x49, 0x8a, 0x1f, 0x52, 0xfa, 0xd8, 0x82, 0x2d, 0x44, 0x2a, 0xc7, 0x75, 0xc4, 0xca, 0xf6, 0x6b,
-	0x90, 0xa5, 0x4d, 0x2c, 0x90, 0x77, 0x5d, 0xad, 0x14, 0xea, 0x3f, 0xe9, 0x27, 0xf5, 0xb1, 0x9f,
-	0x50, 0xdc, 0x1f, 0x29, 0xbb, 0x96, 0x2c, 0x1b, 0x1a, 0x92, 0x42, 0x9f, 0xa4, 0xd9, 0x33, 0x73,
-	0xe6, 0xec, 0xd9, 0x19, 0x38, 0x0d, 0xe2, 0x88, 0xd0, 0xb4, 0xb7, 0x4a, 0x58, 0xca, 0x90, 0x2e,
-	0x3f, 0x01, 0x8b, 0xcd, 0x2b, 0xa8, 0x5a, 0x6c, 0xb9, 0xf4, 0x69, 0x88, 0xba, 0xa0, 0xa6, 0xeb,
-	0x15, 0x69, 0x2b, 0x67, 0x4a, 0xb7, 0x79, 0xf9, 0xa2, 0x57, 0xe4, 0xf4, 0x3e, 0x93, 0x74, 0xc1,
-	0xc2, 0xc9, 0x7a, 0x45, 0xb0, 0xcc, 0x40, 0x08, 0xd4, 0xd0, 0x4f, 0xfd, 0x76, 0xe5, 0x4c, 0xe9,
-	0x9e, 0x62, 0xf9, 0x6f, 0xbe, 0x07, 0xcd, 0x4e, 0x12, 0x96, 0x08, 0x30, 0x60, 0xe1, 0x96, 0xa6,
-	0x81, 0xe5, 0x3f, 0x6a, 0x43, 0x75, 0x49, 0x38, 0xf7, 0xef, 0x89, 0xac, 0xa9, 0xe1, 0x22, 0x34,
-	0x67, 0xa0, 0x61, 0xb2, 0x8a, 0xd7, 0xa8, 0x09, 0x95, 0x28, 0xcc, 0x8b, 0x2a, 0x51, 0x88, 0x5e,
-	0x83, 0x46, 0x04, 0x9f, 0x2c, 0xa8, 0x5f, 0xb6, 0x4a, 0x39, 0xb2, 0x0d, 0xde, 0xa2, 0xe8, 0x25,
-	0x9c, 0x24, 0x84, 0x67, 0x71, 0xda, 0x3e, 0x96, 0x62, 0xf2, 0xc8, 0x1c, 0x80, 0xea, 0x66, 0x7c,
-	0x81, 0xde, 0x1c, 0x5c, 0x0a, 0x95, 0x2c, 0x02, 0x7d, 0xe2, 0x4a, 0x09, 0x80, 0x25, 0x5d, 0x73,
-	0xe8, 0x1d, 0x13, 0x19, 0x19, 0x27, 0x89, 0x64, 0xaa, 0x61, 0xf9, 0x2f, 0xba, 0x6f, 0x7d, 0xcd,
-	0xaf, 0x95, 0x47, 0xe8, 0x15, 0xd4, 0x02, 0x46, 0xe9, 0x6d, 0x44, 0xef, 0x58, 0x2e, 0x4c, 0x17,
-	0x07, 0x92, 0x48, 0x80, 0x0b, 0x3f, 0x07, 0xd5, 0x1c, 0x5c, 0xf8, 0x12, 0x34, 0xaf, 0xa1, 0xee,
-	0x66, 0xf3, 0x38, 0x0a, 0xfc, 0x34, 0x62, 0x74, 0x27, 0x4b, 0x29, 0x65, 0x89, 0x77, 0x92, 0xa5,
-	0x5b, 0x63, 0xf6, 0xde, 0xa9, 0x14, 0x8b, 0x65, 0x86, 0x39, 0x04, 0x75, 0xc8, 0x22, 0x2a, 0xec,
-	0x17, 0x0d, 0x28, 0x89, 0x73, 0xf5, 0x45, 0xf8, 0x17, 0x5c, 0xd7, 0xa0, 0x8d, 0x88, 0xff, 0x40,
-	0xfe, 0x09, 0xd9, 0x5b, 0x30, 0xbc, 0x6c, 0xce, 0x83, 0x24, 0x9a, 0x13, 0x4c, 0xbe, 0x64, 0x84,
-	0xa7, 0x8f, 0xf3, 0x9a, 0x3d, 0x40, 0x53, 0xca, 0x9f, 0x9f, 0xff, 0x11, 0x9a, 0xd2, 0x43, 0xbe,
-	0x78, 0x32, 0xf7, 0x8f, 0xef, 0xde, 0x80, 0xba, 0x1b, 0xd1, 0xfb, 0xbc, 0xd8, 0xbc, 0x80, 0x96,
-	0x9b, 0x10, 0x4e, 0x68, 0xf0, 0x8c, 0xde, 0x0c, 0x1a, 0x16, 0xa3, 0x94, 0x04, 0x29, 0x96, 0x83,
-	0xb8, 0x37, 0x22, 0xca, 0xc1, 0x88, 0xb4, 0xa1, 0xfa, 0x40, 0x12, 0x1e, 0x31, 0x5a, 0xac, 0x44,
-	0x1e, 0x0a, 0x84, 0x7c, 0x5d, 0x45, 0x09, 0xe1, 0x72, 0x74, 0x74, 0x5c, 0x84, 0x3b, 0xb1, 0xea,
-	0x9e, 0xd8, 0x0b, 0x68, 0xed, 0x59, 0x29, 0x5b, 0x3e, 0xae, 0xee, 0x7f, 0xf8, 0xef, 0xc0, 0x49,
-	0xb9, 0x2a, 0x2d, 0x68, 0xec, 0xec, 0x12, 0x07, 0xe7, 0x04, 0xa0, 0x5c, 0x79, 0xd4, 0x80, 0x9a,
-	0x37, 0x1d, 0x78, 0x16, 0x76, 0x06, 0xb6, 0x71, 0x84, 0x5a, 0x50, 0x9f, 0x8e, 0xcb, 0x03, 0x05,
-	0xd5, 0xa1, 0xea, 0x4e, 0x07, 0x23, 0xc7, 0xfb, 0x64, 0x54, 0xd0, 0x29, 0xe8, 0x2e, 0xb6, 0x3d,
-	0x7b, 0x6c, 0xd9, 0xc6, 0x31, 0x42, 0xd0, 0x2c, 0xa2, 0x5b, 0x6f, 0xd2, 0x9f, 0x78, 0x86, 0x8a,
-	0x74, 0x50, 0x5d, 0x67, 0x7c, 0x65, 0x68, 0xe7, 0x1f, 0x40, 0x2f, 0x96, 0x50, 0xb0, 0x4a, 0x12,
-	0xab, 0x3f, 0x71, 0x6e, 0xc6, 0xc6, 0x91, 0x48, 0x1b, 0xde, 0x38, 0x63, 0x43, 0x41, 0x35, 0xd0,
-	0x46, 0x76, 0x7f, 0x66, 0x1b, 0x15, 0xd1, 0xca, 0xb3, 0xf1, 0xcc, 0xb1, 0x6c, 0x43, 0x1d, 0x18,
-	0xdf, 0x37, 0x1d, 0xe5, 0xc7, 0xa6, 0xa3, 0xfc, 0xdc, 0x74, 0x94, 0x6f, 0xbf, 0x3a, 0x47, 0xf3,
-	0x13, 0x39, 0x70, 0xef, 0x7e, 0x07, 0x00, 0x00, 0xff, 0xff, 0x26, 0x85, 0xe2, 0xde, 0xec, 0x04,
-	0x00, 0x00,
+	// 688 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x94, 0xed, 0x6a, 0xdb, 0x3c,
+	0x14, 0xc7, 0xe3, 0xc4, 0x4e, 0x93, 0xe3, 0x26, 0xf1, 0xa3, 0xe7, 0xe1, 0x21, 0x8c, 0x91, 0x15,
+	0xc3, 0x4a, 0x48, 0x47, 0x18, 0x1d, 0x83, 0x31, 0xd8, 0xa0, 0x31, 0x5e, 0xe7, 0xb4, 0x73, 0x3c,
+	0x3b, 0xe9, 0xbe, 0x15, 0x1c, 0x47, 0x6d, 0x4c, 0x5d, 0x29, 0xf3, 0x4b, 0x59, 0xee, 0x64, 0x77,
+	0xb0, 0x5b, 0xd9, 0xc7, 0x5d, 0xc2, 0xe8, 0x6e, 0x64, 0x48, 0xf1, 0x4b, 0xc2, 0xba, 0xb6, 0x83,
+	0x7d, 0xb2, 0x8e, 0xf4, 0x3f, 0xbf, 0x23, 0xfd, 0x75, 0x64, 0xd8, 0xf6, 0x02, 0x1f, 0x93, 0xb8,
+	0xbf, 0x08, 0x69, 0x4c, 0x51, 0x8d, 0x7f, 0x3c, 0x1a, 0xa8, 0x87, 0xb0, 0xa5, 0xd1, 0xcb, 0x4b,
+	0x97, 0xcc, 0x50, 0x17, 0xc4, 0x78, 0xb9, 0xc0, 0x6d, 0x61, 0x47, 0xe8, 0x36, 0xf7, 0xff, 0xeb,
+	0x67, 0x9a, 0xfe, 0x3b, 0x1c, 0xcf, 0xe9, 0x6c, 0xbc, 0x5c, 0x60, 0x9b, 0x2b, 0x10, 0x02, 0x71,
+	0xe6, 0xc6, 0x6e, 0xbb, 0xbc, 0x23, 0x74, 0xb7, 0x6d, 0x3e, 0x56, 0x9f, 0x83, 0xa4, 0x87, 0x21,
+	0x0d, 0xd9, 0xa2, 0x47, 0x67, 0x2b, 0x4c, 0xc3, 0xe6, 0x63, 0xd4, 0x86, 0xad, 0x4b, 0x1c, 0x45,
+	0xee, 0x39, 0xe6, 0x39, 0x75, 0x3b, 0x0b, 0xd5, 0x13, 0x90, 0x6c, 0xbc, 0x08, 0x96, 0xa8, 0x09,
+	0x65, 0x7f, 0x96, 0x26, 0x95, 0xfd, 0x19, 0x7a, 0x0c, 0x12, 0x66, 0x3c, 0x9e, 0x20, 0xef, 0xb7,
+	0x8a, 0xed, 0xf0, 0x32, 0xf6, 0x6a, 0x15, 0xfd, 0x0f, 0xd5, 0x10, 0x47, 0x49, 0x10, 0xb7, 0x2b,
+	0x7c, 0x33, 0x69, 0xa4, 0x0e, 0x40, 0xb4, 0x92, 0x68, 0x8e, 0x76, 0x37, 0x0e, 0x85, 0x0a, 0x0a,
+	0x5b, 0xbd, 0xe3, 0x48, 0x4f, 0x01, 0x34, 0xee, 0x9a, 0x41, 0xce, 0xe8, 0xda, 0x06, 0xeb, 0x7c,
+	0x83, 0x08, 0x44, 0x9f, 0x9c, 0xd1, 0x2c, 0x83, 0x8d, 0xd5, 0x23, 0x90, 0xad, 0x64, 0x1a, 0xf8,
+	0x9e, 0x1b, 0xfb, 0x94, 0xe4, 0x50, 0xa1, 0x80, 0x32, 0x97, 0xf3, 0x34, 0x79, 0xdd, 0xe5, 0xa2,
+	0x54, 0x0a, 0x1b, 0x82, 0x38, 0xa4, 0x3e, 0x61, 0xe6, 0x79, 0x73, 0x97, 0x10, 0x1c, 0xa4, 0xd5,
+	0xb3, 0xf0, 0x0f, 0x58, 0x47, 0x20, 0x1d, 0x63, 0xf7, 0x0a, 0xff, 0x15, 0xd8, 0x29, 0x28, 0x4e,
+	0x32, 0x8d, 0xbc, 0xd0, 0x9f, 0x62, 0x1b, 0x7f, 0x4c, 0x70, 0x14, 0xdf, 0xc2, 0x7d, 0x08, 0xf5,
+	0xc8, 0x3f, 0x27, 0x6e, 0x9c, 0x84, 0xd9, 0xed, 0x17, 0x13, 0xb9, 0x45, 0x95, 0x35, 0xdf, 0xfb,
+	0x80, 0x26, 0x24, 0xba, 0x77, 0x05, 0xf5, 0x35, 0x34, 0xb9, 0xeb, 0xd1, 0xfc, 0xee, 0xdd, 0xdc,
+	0x74, 0xcf, 0x01, 0x34, 0x35, 0x4a, 0x08, 0xf6, 0xe2, 0x2c, 0xff, 0x09, 0x54, 0x57, 0xef, 0xe5,
+	0xd7, 0xc7, 0xb0, 0x72, 0x83, 0x77, 0x4e, 0xaa, 0x61, 0xd5, 0xae, 0x70, 0x18, 0xf9, 0x94, 0x64,
+	0xdd, 0x9d, 0x86, 0x37, 0x9e, 0xae, 0x01, 0xb2, 0xe5, 0x93, 0xf3, 0xb4, 0x94, 0x3a, 0x82, 0x46,
+	0x5e, 0x9c, 0x75, 0x2e, 0x52, 0xa0, 0x92, 0xe4, 0x8d, 0xc6, 0x86, 0x8c, 0x8f, 0x3f, 0x2d, 0xfc,
+	0x10, 0x47, 0x1c, 0x54, 0xb1, 0xb3, 0x30, 0xe7, 0x8b, 0x6b, 0xfc, 0x3d, 0x68, 0xad, 0xdd, 0x0e,
+	0x47, 0xfe, 0xde, 0xba, 0x7f, 0xe1, 0x9f, 0x0d, 0xab, 0xf9, 0xdb, 0x69, 0x41, 0x23, 0xf7, 0x93,
+	0x4f, 0xec, 0x41, 0xcb, 0x0a, 0x71, 0x84, 0x89, 0x77, 0x8f, 0xdb, 0xf8, 0x22, 0x40, 0xb3, 0x50,
+	0xf3, 0xfa, 0x03, 0xa8, 0x2d, 0xd2, 0x99, 0xb6, 0xb0, 0x53, 0xe9, 0xca, 0xfb, 0xbb, 0x6b, 0x0f,
+	0x71, 0x43, 0x9b, 0x87, 0x3a, 0x89, 0xc3, 0xa5, 0x9d, 0xe7, 0x3d, 0x78, 0x0f, 0x8d, 0x8d, 0x25,
+	0xe6, 0xd3, 0x05, 0x5e, 0x66, 0x3e, 0x5d, 0xe0, 0x25, 0xea, 0x81, 0x74, 0xe5, 0x06, 0x09, 0xbe,
+	0xb5, 0x85, 0x57, 0x92, 0x97, 0xe5, 0x17, 0x42, 0xef, 0x14, 0xa0, 0xf8, 0xb5, 0x21, 0x19, 0xb6,
+	0xb4, 0x91, 0x69, 0xea, 0xda, 0x58, 0x29, 0xa1, 0x06, 0xd4, 0x9d, 0xc9, 0xc0, 0xd1, 0x6c, 0x63,
+	0xa0, 0x2b, 0x02, 0x6a, 0x81, 0x3c, 0x31, 0x8b, 0x89, 0x32, 0x13, 0x5b, 0x93, 0xc1, 0xb1, 0xe1,
+	0xbc, 0x55, 0x2a, 0x68, 0x1b, 0x6a, 0x96, 0xad, 0x3b, 0xba, 0xa9, 0xe9, 0x8a, 0x88, 0x6a, 0x20,
+	0x5a, 0x86, 0x79, 0xa8, 0x48, 0xbd, 0x57, 0x50, 0xcb, 0xfe, 0x32, 0x8c, 0xc0, 0x13, 0xb4, 0x83,
+	0xb1, 0x31, 0x32, 0x95, 0x12, 0x93, 0x0d, 0x47, 0x86, 0xa9, 0x08, 0xa8, 0x0e, 0xd2, 0xb1, 0x7e,
+	0x70, 0x92, 0x62, 0x1d, 0xdd, 0x3e, 0x31, 0x18, 0xa8, 0xf7, 0x28, 0xfb, 0xfd, 0x70, 0x40, 0x15,
+	0xca, 0x43, 0x47, 0x29, 0x31, 0xb5, 0xf3, 0xc1, 0x78, 0x33, 0x56, 0x84, 0x81, 0xf2, 0xf5, 0xba,
+	0x23, 0x7c, 0xbb, 0xee, 0x08, 0xdf, 0xaf, 0x3b, 0xc2, 0xe7, 0x1f, 0x9d, 0xd2, 0xb4, 0xca, 0x4f,
+	0xfc, 0xec, 0x67, 0x00, 0x00, 0x00, 0xff, 0xff, 0x64, 0xf0, 0xf0, 0x89, 0xee, 0x05, 0x00, 0x00,
 }
 
 func (m *Command) Marshal() (dAtA []byte, err error) {
@@ -1243,31 +1379,17 @@ func (m *ClientInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if len(m.ChanInfo) > 0 {
-		i -= len(m.ChanInfo)
-		copy(dAtA[i:], m.ChanInfo)
-		i = encodeVarintClient(dAtA, i, uint64(len(m.ChanInfo)))
-		i--
-		dAtA[i] = 0x22
-	}
-	if len(m.ConnInfo) > 0 {
-		i -= len(m.ConnInfo)
-		copy(dAtA[i:], m.ConnInfo)
-		i = encodeVarintClient(dAtA, i, uint64(len(m.ConnInfo)))
-		i--
-		dAtA[i] = 0x1a
-	}
-	if len(m.Client) > 0 {
-		i -= len(m.Client)
-		copy(dAtA[i:], m.Client)
-		i = encodeVarintClient(dAtA, i, uint64(len(m.Client)))
+	if len(m.Info) > 0 {
+		i -= len(m.Info)
+		copy(dAtA[i:], m.Info)
+		i = encodeVarintClient(dAtA, i, uint64(len(m.Info)))
 		i--
 		dAtA[i] = 0x12
 	}
-	if len(m.User) > 0 {
-		i -= len(m.User)
-		copy(dAtA[i:], m.User)
-		i = encodeVarintClient(dAtA, i, uint64(len(m.User)))
+	if len(m.Id) > 0 {
+		i -= len(m.Id)
+		copy(dAtA[i:], m.Id)
+		i = encodeVarintClient(dAtA, i, uint64(len(m.Id)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1436,6 +1558,20 @@ func (m *SubscribeRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
+	if len(m.Data) > 0 {
+		i -= len(m.Data)
+		copy(dAtA[i:], m.Data)
+		i = encodeVarintClient(dAtA, i, uint64(len(m.Data)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.Signature) > 0 {
+		i -= len(m.Signature)
+		copy(dAtA[i:], m.Signature)
+		i = encodeVarintClient(dAtA, i, uint64(len(m.Signature)))
+		i--
+		dAtA[i] = 0x12
+	}
 	if len(m.Channel) > 0 {
 		i -= len(m.Channel)
 		copy(dAtA[i:], m.Channel)
@@ -1521,6 +1657,52 @@ func (m *PublishRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *ConnectRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ConnectRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ConnectRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Data) > 0 {
+		i -= len(m.Data)
+		copy(dAtA[i:], m.Data)
+		i = encodeVarintClient(dAtA, i, uint64(len(m.Data)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.Version) > 0 {
+		i -= len(m.Version)
+		copy(dAtA[i:], m.Version)
+		i = encodeVarintClient(dAtA, i, uint64(len(m.Version)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Client != 0 {
+		i = encodeVarintClient(dAtA, i, uint64(m.Client))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *PingRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1544,40 +1726,6 @@ func (m *PingRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *PresenceRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *PresenceRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *PresenceRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if len(m.Channel) > 0 {
-		i -= len(m.Channel)
-		copy(dAtA[i:], m.Channel)
-		i = encodeVarintClient(dAtA, i, uint64(len(m.Channel)))
-		i--
-		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -1613,27 +1761,15 @@ func (m *ConnectResult) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x22
 	}
-	if m.Expires {
-		i--
-		if m.Expires {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
+	if m.Expires != 0 {
+		i = encodeVarintClient(dAtA, i, uint64(m.Expires))
 		i--
 		dAtA[i] = 0x18
 	}
-	if len(m.Version) > 0 {
-		i -= len(m.Version)
-		copy(dAtA[i:], m.Version)
-		i = encodeVarintClient(dAtA, i, uint64(len(m.Version)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Client) > 0 {
-		i -= len(m.Client)
-		copy(dAtA[i:], m.Client)
-		i = encodeVarintClient(dAtA, i, uint64(len(m.Client)))
+	if len(m.Uid) > 0 {
+		i -= len(m.Uid)
+		copy(dAtA[i:], m.Uid)
+		i = encodeVarintClient(dAtA, i, uint64(len(m.Uid)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1724,6 +1860,93 @@ func (m *PublishResult) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PresenceRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PresenceRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PresenceRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Channel) > 0 {
+		i -= len(m.Channel)
+		copy(dAtA[i:], m.Channel)
+		i = encodeVarintClient(dAtA, i, uint64(len(m.Channel)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PresenceResult) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PresenceResult) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PresenceResult) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Presence) > 0 {
+		for k := range m.Presence {
+			v := m.Presence[k]
+			baseI := i
+			if v != nil {
+				{
+					size, err := v.MarshalToSizedBuffer(dAtA[:i])
+					if err != nil {
+						return 0, err
+					}
+					i -= size
+					i = encodeVarintClient(dAtA, i, uint64(size))
+				}
+				i--
+				dAtA[i] = 0x12
+			}
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintClient(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintClient(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0xa
+		}
 	}
 	return len(dAtA) - i, nil
 }
@@ -1825,19 +2048,11 @@ func (m *ClientInfo) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.User)
+	l = len(m.Id)
 	if l > 0 {
 		n += 1 + l + sovClient(uint64(l))
 	}
-	l = len(m.Client)
-	if l > 0 {
-		n += 1 + l + sovClient(uint64(l))
-	}
-	l = len(m.ConnInfo)
-	if l > 0 {
-		n += 1 + l + sovClient(uint64(l))
-	}
-	l = len(m.ChanInfo)
+	l = len(m.Info)
 	if l > 0 {
 		n += 1 + l + sovClient(uint64(l))
 	}
@@ -1917,6 +2132,14 @@ func (m *SubscribeRequest) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovClient(uint64(l))
 	}
+	l = len(m.Signature)
+	if l > 0 {
+		n += 1 + l + sovClient(uint64(l))
+	}
+	l = len(m.Data)
+	if l > 0 {
+		n += 1 + l + sovClient(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1959,6 +2182,29 @@ func (m *PublishRequest) Size() (n int) {
 	return n
 }
 
+func (m *ConnectRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Client != 0 {
+		n += 1 + sovClient(uint64(m.Client))
+	}
+	l = len(m.Version)
+	if l > 0 {
+		n += 1 + l + sovClient(uint64(l))
+	}
+	l = len(m.Data)
+	if l > 0 {
+		n += 1 + l + sovClient(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *PingRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1971,38 +2217,18 @@ func (m *PingRequest) Size() (n int) {
 	return n
 }
 
-func (m *PresenceRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.Channel)
-	if l > 0 {
-		n += 1 + l + sovClient(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
 func (m *ConnectResult) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	l = len(m.Client)
+	l = len(m.Uid)
 	if l > 0 {
 		n += 1 + l + sovClient(uint64(l))
 	}
-	l = len(m.Version)
-	if l > 0 {
-		n += 1 + l + sovClient(uint64(l))
-	}
-	if m.Expires {
-		n += 2
+	if m.Expires != 0 {
+		n += 1 + sovClient(uint64(m.Expires))
 	}
 	l = len(m.Data)
 	if l > 0 {
@@ -2048,6 +2274,47 @@ func (m *PublishResult) Size() (n int) {
 	}
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PresenceRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Channel)
+	if l > 0 {
+		n += 1 + l + sovClient(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PresenceResult) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Presence) > 0 {
+		for k, v := range m.Presence {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+				l += 1 + sovClient(uint64(l))
+			}
+			mapEntrySize := 1 + len(k) + sovClient(uint64(len(k))) + l
+			n += mapEntrySize + 1 + sovClient(uint64(mapEntrySize))
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2553,7 +2820,7 @@ func (m *ClientInfo) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -2581,43 +2848,11 @@ func (m *ClientInfo) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.User = string(dAtA[iNdEx:postIndex])
+			m.Id = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Client", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowClient
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthClient
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthClient
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Client = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ConnInfo", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -2644,43 +2879,9 @@ func (m *ClientInfo) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ConnInfo = append(m.ConnInfo[:0], dAtA[iNdEx:postIndex]...)
-			if m.ConnInfo == nil {
-				m.ConnInfo = []byte{}
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ChanInfo", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowClient
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthClient
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthClient
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ChanInfo = append(m.ChanInfo[:0], dAtA[iNdEx:postIndex]...)
-			if m.ChanInfo == nil {
-				m.ChanInfo = []byte{}
+			m.Info = append(m.Info[:0], dAtA[iNdEx:postIndex]...)
+			if m.Info == nil {
+				m.Info = []byte{}
 			}
 			iNdEx = postIndex
 		default:
@@ -3137,6 +3338,72 @@ func (m *SubscribeRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.Channel = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signature", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClient
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthClient
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthClient
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Signature = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClient
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthClient
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthClient
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Data = append(m.Data[:0], dAtA[iNdEx:postIndex]...)
+			if m.Data == nil {
+				m.Data = []byte{}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipClient(dAtA[iNdEx:])
@@ -3368,6 +3635,145 @@ func (m *PublishRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *ConnectRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowClient
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ConnectRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ConnectRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Client", wireType)
+			}
+			m.Client = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClient
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Client |= ClientType(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClient
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthClient
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthClient
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Version = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClient
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthClient
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthClient
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Data = append(m.Data[:0], dAtA[iNdEx:postIndex]...)
+			if m.Data == nil {
+				m.Data = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipClient(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthClient
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthClient
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *PingRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3397,92 +3803,6 @@ func (m *PingRequest) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: PingRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
-		default:
-			iNdEx = preIndex
-			skippy, err := skipClient(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthClient
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthClient
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *PresenceRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowClient
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: PresenceRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: PresenceRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Channel", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowClient
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthClient
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthClient
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Channel = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipClient(dAtA[iNdEx:])
@@ -3539,7 +3859,7 @@ func (m *ConnectResult) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Client", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Uid", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -3567,45 +3887,13 @@ func (m *ConnectResult) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Client = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowClient
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthClient
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthClient
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Version = string(dAtA[iNdEx:postIndex])
+			m.Uid = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Expires", wireType)
 			}
-			var v int
+			m.Expires = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowClient
@@ -3615,12 +3903,11 @@ func (m *ConnectResult) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= int(b&0x7F) << shift
+				m.Expires |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.Expires = bool(v != 0)
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
@@ -3849,6 +4136,275 @@ func (m *PublishResult) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: PublishResult: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipClient(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthClient
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthClient
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PresenceRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowClient
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PresenceRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PresenceRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Channel", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClient
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthClient
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthClient
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Channel = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipClient(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthClient
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthClient
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PresenceResult) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowClient
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PresenceResult: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PresenceResult: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Presence", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClient
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthClient
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthClient
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Presence == nil {
+				m.Presence = make(map[string]*ClientInfo)
+			}
+			var mapkey string
+			var mapvalue *ClientInfo
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowClient
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowClient
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthClient
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthClient
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var mapmsglen int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowClient
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapmsglen |= int(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					if mapmsglen < 0 {
+						return ErrInvalidLengthClient
+					}
+					postmsgIndex := iNdEx + mapmsglen
+					if postmsgIndex < 0 {
+						return ErrInvalidLengthClient
+					}
+					if postmsgIndex > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = &ClientInfo{}
+					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+						return err
+					}
+					iNdEx = postmsgIndex
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipClient(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthClient
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Presence[mapkey] = mapvalue
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipClient(dAtA[iNdEx:])

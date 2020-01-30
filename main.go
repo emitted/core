@@ -26,7 +26,7 @@ var (
 		Key:      "Njc4ZGYyZDgtN2ZjMC00ZjAwLWI2OWYtZTZhMGQxYjU4YjQ4",
 		Secret:   "8788369a-227f-11ea-8cb8-1ee2210c29b2",
 		Cluster:  "US",
-		Clients:  make(map[uint32]*Client, 0),
+		Clients:  make(map[string]*Client, 0),
 		Channels: make(map[string]*Channel, 0),
 		Options: &AppOptions{
 			MaxConnections: 1500,
@@ -41,6 +41,10 @@ var (
 func main() {
 
 	node.Run()
+
+	time.Sleep(time.Second * 5)
+
+	node.Shutdown(customCancelContext{ch: make(chan struct{})})
 
 	mux := pat.New()
 
