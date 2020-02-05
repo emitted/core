@@ -67,9 +67,7 @@ func (app *App) removeSub(ch string, c *Client) (bool, error) {
 
 	if len(app.Channels[ch].Clients) == 0 {
 		lastClient = true
-	}
 
-	if len(app.Channels[ch].Clients) == 0 {
 		delete(app.Channels, ch)
 	}
 

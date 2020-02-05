@@ -53,7 +53,7 @@ message Publication {
 
 message Join {
     string channel = 1;
-    ClientInfo info = 2;
+    ClientInfo data = 2;
 }
 
 message Leave {
@@ -88,6 +88,10 @@ message ConnectRequest {
 }
 
 message PingRequest {
+}
+
+message PingResult {
+
 }
 
 message ConnectResult {

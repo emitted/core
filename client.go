@@ -5,8 +5,8 @@ import (
 
 	"context"
 	protocol "github.com/sireax/emitted/internal/proto"
+	"github.com/sireax/emitted/internal/uuid"
 	"log"
-	"math/rand"
 	"sync"
 	"time"
 )
@@ -16,12 +16,14 @@ type Client struct {
 	mu         sync.RWMutex
 	presenceMu sync.Mutex
 
-	ctx context.Context
+	ctx  context.Context
+	node *Node
 
 	authenticated bool
 	closed        bool
 
-	uid     string
+	uid string
+
 	client  string
 	version string
 
@@ -44,11 +46,13 @@ type Client struct {
 // NewClient ...
 func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 
-	uuid := string(rand.Uint32())
+	uuid, _ := uuid.NewV4()
+
+	log.Println(uuid.String())
 
 	client := &Client{
 		ctx:           ctx,
-		uid:           uuid,
+		uid:           uuid.String(),
 		channels:      make(map[string]*Channel),
 		transport:     t,
 		authenticated: false,
@@ -80,7 +84,7 @@ func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 	client.messageWriter = newWriter(messageWriterConf)
 
 	if !client.authenticated {
-		client.staleTimer = time.AfterFunc(time.Second*5, client.CloseUnauthenticated)
+		client.staleTimer = time.AfterFunc(time.Second*2, client.CloseUnauthenticated)
 	}
 
 	return client, nil
@@ -120,7 +124,7 @@ func (c *Client) Connect(app *App) {
 	app.Stats.Connections++
 }
 
-// Subscribe ...
+// HandleSubscribe ...
 func (c *Client) Subscribe(ch string) {
 	c.mu.RLock()
 	if c.closed {
@@ -145,25 +149,40 @@ func (c *Client) Unsubscribe(ch string) {
 		c.mu.Lock()
 		delete(c.channels, ch)
 		c.mu.Unlock()
+	}
+}
 
-		leave := &Leave{
-			Channel: ch,
-			Info: &ClientInfo{
-				Id: "lox",
-			},
-		}
+func (c *Client) unsubscribeForce(ch string) {
+	c.mu.RLock()
+	_, ok := c.channels[ch]
+	c.mu.RUnlock()
+
+	if ok {
+		c.mu.Lock()
+		delete(c.channels, ch)
+		c.mu.Unlock()
 
 		chId := makeChId(c.app.Key, ch)
-		err := node.broker.PublishLeave(chId, leave)
-		if err != nil {
-			log.Fatal(err)
-		}
 
 		last, err := c.app.removeSub(ch, c)
 		if last {
-			node.broker.Unsubscribe([]string{chId})
 
-			delete(c.app.Channels, ch)
+			node.broker.Unsubscribe(chId)
+
+			return
+		}
+
+		leave := &Leave{
+			Channel: ch,
+		}
+
+		if c.clientInfo(ch) != nil {
+			leave.Info = c.clientInfo(ch)
+		}
+
+		err = node.broker.PublishLeave(chId, leave)
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 }
@@ -209,7 +228,7 @@ func (c *Client) Close(disconnect *Disconnect) {
 	c.mu.Unlock()
 
 	for _, channel := range channels {
-		c.Unsubscribe(channel)
+		c.unsubscribeForce(channel)
 	}
 
 	if len(c.app.Channels) == 0 {
@@ -317,6 +336,16 @@ func (c *Client) HandleCommand(cmd *Command) *Disconnect {
 		disconnect = c.handlePublish(cmd.Data, rw)
 	case MethodTypePresence:
 		disconnect = c.handlePresence(cmd.Data, rw)
+	case MethodTypePing:
+		disconnect = c.handlePing(cmd.Data, rw)
+	default:
+		err := rw.write(&Reply{
+			Error: ErrorBadRequest,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+		return nil
 	}
 
 	return disconnect
@@ -335,7 +364,7 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 			Error: ErrorBadRequest,
 		})
 		if err != nil {
-			return DisconnectServerError
+			return DisconnectWriteError
 		}
 
 		return nil
@@ -357,7 +386,7 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 	c.staleTimer.Stop()
 
 	c.expireTimer = time.AfterFunc(time.Hour, c.Expire)
-	c.mu.Unlock()
+	c.mu.RUnlock()
 
 	expires := time.Now().Add(time.Hour).Unix()
 
@@ -382,7 +411,13 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	p, err := protocol.NewProtobufParamsDecoder().DecodeSubscribe(data)
 	if err != nil {
-		return DisconnectBadRequest
+		err := rw.write(&Reply{
+			Error: ErrorBadRequest,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+		return nil
 	}
 
 	if p.Channel == "" {
@@ -390,18 +425,18 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 			Error: ErrorBadRequest,
 		})
 		if err != nil {
-			return DisconnectServerError
+			return DisconnectWriteError
 		}
 
 		return nil
 	}
 
-	var clientInfo *ClientInfo
+	var clientInfo ClientInfo
 
 	switch getChannelType(p.Channel) {
 	case "private":
 
-		signature := generateSignature(c.app.Key, c.uid, p.Channel)
+		signature := generateSignature(c.app.Secret, c.app.Key, c.uid, p.Channel)
 
 		ok := verifySignature(signature, p.Signature)
 		if !ok {
@@ -409,14 +444,14 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 				Error: ErrorInvalidSignature,
 			})
 			if err != nil {
-				return DisconnectServerError
+				return DisconnectWriteError
 			}
 			return nil
 		}
 
 	case "presence":
 
-		signature := generateSignature(c.app.Key, c.uid, p.Channel)
+		signature := generateSignature(c.app.Secret, c.app.Key, c.uid, p.Channel)
 
 		ok := verifySignature(signature, p.Signature)
 		if !ok {
@@ -424,8 +459,9 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 				Error: ErrorInvalidSignature,
 			})
 			if err != nil {
-				return DisconnectServerError
+				return DisconnectWriteError
 			}
+			return nil
 		}
 
 		err := clientInfo.Unmarshal(p.Data)
@@ -434,10 +470,12 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 				Error: ErrorBadRequest,
 			})
 			if err != nil {
-				return DisconnectServerError
+				return DisconnectWriteError
 			}
 			return nil
 		}
+
+		log.Println(clientInfo)
 
 	default:
 	}
@@ -448,26 +486,22 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 			Error: ErrorAlreadySubscribed,
 		})
 		if err != nil {
-			return DisconnectServerError
+			return DisconnectWriteError
 		}
 
 		return nil
 	}
 
-	first := c.app.addSub(p.Channel, c, clientInfo)
+	first := c.app.addSub(p.Channel, c, &clientInfo)
 	chId := makeChId(c.app.Key, p.Channel)
 
 	if first {
-		node.broker.Subscribe([]string{chId})
+		node.broker.Subscribe(chId)
 	}
 
 	c.Subscribe(p.Channel)
 
-	sr := &SubscribeRequest{
-		Channel: p.Channel,
-	}
-
-	err = node.broker.handleSubscribe(chId, sr)
+	err = node.broker.HandleSubscribe(chId, p, &clientInfo)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -522,11 +556,17 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 		Channel: p.Channel,
 	}
 
+	var info *ClientInfo
+	info = c.clientInfo(p.Channel)
+
 	if !last {
-		err = node.broker.handleUnsubscribe(chId, usr)
+		err = node.broker.HandleUnsubscribe(chId, usr, info)
 		if err != nil {
 			log.Fatal(err)
 		}
+	} else {
+		log.Println("This was last user")
+		node.broker.Unsubscribe(chId)
 	}
 
 	c.Unsubscribe(p.Channel)
@@ -566,7 +606,7 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 
 	chId := makeChId(c.app.Key, p.Channel)
 
-	err = node.broker.handlePublish(chId, c, p)
+	err = node.broker.Publish(chId, c, p)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -629,6 +669,29 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 	if err != nil {
 		return DisconnectServerError
 	}
+	return disconnect
+
+}
+
+func (c *Client) handlePing(data []byte, rw *replyWriter) *Disconnect {
+
+	var disconnect *Disconnect
+
+	_, err := protocol.NewProtobufParamsDecoder().DecodePing(data)
+	if err != nil {
+		return DisconnectBadRequest
+	}
+
+	pingRes := &PingResult{}
+	bytesRes, _ := pingRes.Marshal()
+
+	err = rw.write(&Reply{
+		Result: bytesRes,
+	})
+	if err != nil {
+		return DisconnectServerError
+	}
+
 	return disconnect
 
 }

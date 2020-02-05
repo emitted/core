@@ -27,6 +27,7 @@ type (
 	PublishResult     = protocol.PublishResult
 	PresenceResult    = protocol.PresenceResult
 	ConnectResult     = protocol.ConnectResult
+	PingResult        = protocol.PingResult
 )
 
 const (

@@ -3,18 +3,22 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 )
 
-func generateSignature(key, uid, channel string) string {
-	var hash []byte
+func generateSignature(secret, key, uid, channel string) string {
 
 	signArray := []string{key, uid, channel}
 	sign := strings.Join(signArray, ":")
 
-	hmac.New(sha256.New, []byte(sign)).Write(hash)
+	salt := key + ":" + secret + ":" + uid
 
-	return string(hash)
+	h := hmac.New(sha256.New, []byte(salt))
+	h.Write([]byte(sign))
+
+	//return base64.StdEncoding.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func verifySignature(generated, sign string) bool {

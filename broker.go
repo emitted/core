@@ -4,6 +4,9 @@ import (
 	"errors"
 	"github.com/sireax/emitted/internal/timers"
 	"log"
+	"net"
+	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
@@ -11,39 +14,210 @@ import (
 
 // Broker structure represents message broker, connected with API
 type Broker struct {
+	node   *Node
+	shards []*shard
+	config BrokerConfig
+}
+
+type BrokerConfig struct {
+	Shards []BrokerShardConfig
+}
+
+type shard struct {
+	node        *Node
+	broker      *Broker
+	config      BrokerShardConfig
 	pool        *redis.Pool
-	Config      *BrokerConfig
 	subCh       chan *subRequest
 	subMessages chan redis.Message
 	pubMessages chan pubRequest
 }
 
+type BrokerShardConfig struct {
+	Host string
+	// Port is Redis server port.
+	Port int
+	// Password is password to use when connecting to Redis database. If empty then password not used.
+	Password string
+	// DB is Redis database number. If not set then database 0 used.
+	DB int
+	// MasterName is a name of Redis instance master Sentinel monitors.
+	MasterName string
+	// IdleTimeout is timeout after which idle connections to Redis will be closed.
+	IdleTimeout time.Duration
+	// PubSubNumWorkers sets how many PUB/SUB message processing workers will be started.
+	// By default we start runtime.NumCPU() workers.
+	PubSubNumWorkers int
+	// ReadTimeout is a timeout on read operations. Note that at moment it should be greater
+	// than node ping publish interval in order to prevent timing out Pubsub connection's
+	// Receive call.
+	ReadTimeout time.Duration
+	// WriteTimeout is a timeout on write operations.
+	WriteTimeout time.Duration
+	// ConnectTimeout is a timeout on connect operation.
+	ConnectTimeout time.Duration
+}
+
 // NewBroker function initializes BrokerMessage Broker
-func NewBroker() *Broker {
+func NewBroker(n *Node, config BrokerConfig) (*Broker, error) {
+
+	var shards []*shard
+
+	if len(config.Shards) == 0 {
+		return nil, errors.New("no Redis shards provided in configuration")
+	}
+
+	if len(config.Shards) > 1 {
+		log.Println("sharding", len(config.Shards), "instances")
+	}
+
+	for _, conf := range config.Shards {
+		shard, err := newShard(n, conf)
+		if err != nil {
+			return nil, err
+		}
+		shards = append(shards, shard)
+	}
+
 	return &Broker{
-		Config:      config.Broker,
-		subCh:       make(chan *subRequest, 0),
-		subMessages: make(chan redis.Message, 0),
-		pubMessages: make(chan pubRequest, 0),
+		node:   n,
+		shards: shards,
+		config: config,
+	}, nil
+}
+
+func (b *Broker) Subscribe(chId string) {
+	b.getShard(chId).Subscribe([]string{chId})
+}
+
+func (b *Broker) Unsubscribe(chId string) {
+	b.getShard(chId).Unsubscribe([]string{chId})
+}
+
+func (b *Broker) Publish(ch string, c *Client, p *PublishRequest) error {
+	return b.getShard(ch).handlePublish(ch, c, p)
+}
+
+func (b *Broker) HandleSubscribe(chId string, r *SubscribeRequest, p *ClientInfo) error {
+	return b.getShard(chId).handleSubscribe(chId, r, p)
+}
+
+func (b *Broker) HandleUnsubscribe(chId string, r *UnsubscribeRequest, p *ClientInfo) error {
+	return b.getShard(chId).handleUnsubscribe(chId, r, p)
+}
+
+func (b *Broker) PublishJoin(chId string, join *Join) error {
+	return b.getShard(chId).PublishJoin(chId, join)
+}
+
+func (b *Broker) PublishLeave(chId string, leave *Leave) error {
+	return b.getShard(chId).PublishLeave(chId, leave)
+}
+
+func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
+	host := conf.Host
+	port := conf.Port
+	password := conf.Password
+	db := conf.DB
+
+	serverAddr := net.JoinHostPort(host, strconv.Itoa(port))
+
+	poolSize := runtime.NumCPU()
+
+	maxIdle := 64
+	if poolSize < maxIdle {
+		maxIdle = poolSize
+	}
+
+	return &redis.Pool{
+		MaxIdle:     maxIdle,
+		MaxActive:   poolSize,
+		Wait:        true,
+		IdleTimeout: conf.IdleTimeout,
+		Dial: func() (redis.Conn, error) {
+			var err error
+
+			var readTimeout = time.Second
+			if conf.ReadTimeout != 0 {
+				readTimeout = conf.ReadTimeout
+			}
+			var writeTimeout = time.Second
+			if conf.WriteTimeout != 0 {
+				writeTimeout = conf.WriteTimeout
+			}
+			var connectTimeout = time.Second * 30
+			if conf.ConnectTimeout != 0 {
+				connectTimeout = conf.ConnectTimeout
+			}
+
+			opts := []redis.DialOption{
+				redis.DialConnectTimeout(connectTimeout),
+				redis.DialReadTimeout(readTimeout),
+				redis.DialWriteTimeout(writeTimeout),
+			}
+			c, err := redis.Dial("tcp", serverAddr, opts...)
+			if err != nil {
+				return nil, err
+			}
+
+			if password != "" {
+				if _, err := c.Do("AUTH", password); err != nil {
+					c.Close()
+					return nil, err
+				}
+			}
+
+			if db != 0 {
+				if _, err := c.Do("SELECT", db); err != nil {
+					c.Close()
+					return nil, err
+				}
+			}
+
+			return c, err
+		},
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
 	}
 }
 
-/*
-|--------------------------------------------------
-|	Run broker
-|--------------------------------------------------
-|
-|
-*/
-
 func (b *Broker) Run() error {
+	for _, shard := range b.shards {
+		shard.broker = b
+		err := shard.Run()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	b.pool = &redis.Pool{
+func newShard(n *Node, conf BrokerShardConfig) (*shard, error) {
+	shard := &shard{
+		node:   n,
+		config: conf,
+		pool:   newPool(n, conf),
+	}
+	shard.pubMessages = make(chan pubRequest)
+	shard.subCh = make(chan *subRequest)
+	shard.subMessages = make(chan redis.Message)
+	return shard, nil
+}
+
+func (b *Broker) getShard(channel string) *shard {
+	return b.shards[consistentIndex(channel, len(b.shards))]
+}
+
+func (s *shard) Run() error {
+
+	s.pool = &redis.Pool{
 		MaxIdle:   80,
 		MaxActive: 12000, // max number of connections
 		Wait:      true,
 		Dial: func() (redis.Conn, error) {
-			conn, err := redis.Dial("tcp", b.Config.Host+":"+b.Config.Port)
+			conn, err := redis.Dial("tcp", "localhost:6379")
 			if err != nil {
 				log.Fatalln("error while initializing redis pub/sub connection: ", err)
 			}
@@ -53,25 +227,17 @@ func (b *Broker) Run() error {
 	}
 
 	go runForever(func() {
-		b.runPublishPipeline()
+		s.runPublishPipeline()
 	})
 
 	go runForever(func() {
-		b.runPubSub()
+		s.runPubSub()
 	})
 
 	return nil
 }
 
-/*
-|---------------------------------------------------
-|	Publish pipeline
-|---------------------------------------------------
-|
-|
-*/
-
-func (b *Broker) runPublishPipeline() {
+func (s *shard) runPublishPipeline() {
 	var prs []pubRequest
 
 	pingTicker := time.NewTicker(time.Second)
@@ -80,7 +246,7 @@ func (b *Broker) runPublishPipeline() {
 	for {
 		select {
 		case <-pingTicker.C:
-			conn := b.pool.Get()
+			conn := s.pool.Get()
 			err := conn.Send("PUBLISH", "PING_TEST_CHANNEL", nil)
 			if err != nil {
 				log.Fatal(err)
@@ -89,21 +255,21 @@ func (b *Broker) runPublishPipeline() {
 			}
 			conn.Close()
 
-		case p := <-b.pubMessages:
+		case p := <-s.pubMessages:
 
 			prs = append(prs, p)
 
 		loop:
 			for len(prs) < 512 {
 				select {
-				case pr := <-b.pubMessages:
+				case pr := <-s.pubMessages:
 					prs = append(prs, pr)
 				default:
 					break loop
 
 				}
 			}
-			conn := b.pool.Get()
+			conn := s.pool.Get()
 			for i := range prs {
 				conn.Send("PUBLISH", prs[i].chId, prs[i].data)
 			}
@@ -122,16 +288,8 @@ func (b *Broker) runPublishPipeline() {
 
 }
 
-/*
-|-------------------------------------------------
-|	Publish / Subscribe goroutines
-|-------------------------------------------------
-|
-|
-*/
-
-func (b *Broker) runPubSub() {
-	conn := b.pool.Get()
+func (s *shard) runPubSub() {
+	conn := s.pool.Get()
 
 	psc := &redis.PubSubConn{
 		Conn: conn,
@@ -146,7 +304,7 @@ func (b *Broker) runPubSub() {
 	go func() {
 		for {
 			select {
-			case r := <-b.subCh:
+			case r := <-s.subCh:
 				if r.subscribe == true {
 					for _, channel := range r.channels {
 						err := psc.Subscribe(channel)
@@ -168,12 +326,11 @@ func (b *Broker) runPubSub() {
 	}()
 
 	// broadcasting new messages
-	for i := 0; i < b.Config.PubSubWorkers; i++ {
-		log.Println("message worker", i, "is up and running")
+	for i := 0; i < 15; i++ {
 		go func() {
 			for {
 				select {
-				case message := <-b.subMessages:
+				case message := <-s.subMessages:
 
 					switch ChannelID(message.Channel) {
 					case "ping":
@@ -226,32 +383,24 @@ func (b *Broker) runPubSub() {
 
 		case redis.Subscription:
 		case redis.Message:
-			b.subMessages <- m
+			s.subMessages <- m
 		}
 	}
 }
 
-// Subscribe ...
-func (b *Broker) Subscribe(channels []string) {
+// HandleSubscribe ...
+func (s *shard) Subscribe(channels []string) {
 	sub := newSubRequest(channels, true)
-	b.sendSubRequest(sub)
+	s.sendSubRequest(sub)
 }
 
-// Unsubscribe ...
-func (b *Broker) Unsubscribe(channels []string) {
+// HandleUnsubscribe ...
+func (s *shard) Unsubscribe(channels []string) {
 	sub := newSubRequest(channels, false)
-	b.sendSubRequest(sub)
+	s.sendSubRequest(sub)
 }
 
-/*
-|--------------------------------------------------------
-|	Client handlers
-|--------------------------------------------------------
-|
-|
-*/
-
-func (b *Broker) handlePublish(chId string, c *Client, p *PublishRequest) error {
+func (s *shard) handlePublish(chId string, c *Client, p *PublishRequest) error {
 
 	publication := &Publication{
 		Data: p.Data,
@@ -260,26 +409,34 @@ func (b *Broker) handlePublish(chId string, c *Client, p *PublishRequest) error 
 		},
 	}
 
-	return b.Publish(chId, publication)
+	return s.Publish(chId, publication)
 
 }
 
-func (b *Broker) handleSubscribe(chId string, r *SubscribeRequest) error {
+func (s *shard) handleSubscribe(chId string, r *SubscribeRequest, info *ClientInfo) error {
 
 	join := &Join{
 		Channel: r.Channel,
 	}
 
-	return b.PublishJoin(chId, join)
+	if info != nil {
+		join.Data = info
+	}
+
+	return s.PublishJoin(chId, join)
 }
 
-func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest) error {
+func (s *shard) handleUnsubscribe(chId string, r *UnsubscribeRequest, info *ClientInfo) error {
 
 	leave := &Leave{
 		Channel: r.Channel,
 	}
 
-	return b.PublishLeave(chId, leave)
+	if info != nil {
+		leave.Info = info
+	}
+
+	return s.PublishLeave(chId, leave)
 }
 
 /*
@@ -290,7 +447,7 @@ func (b *Broker) handleUnsubscribe(chId string, r *UnsubscribeRequest) error {
 |
 */
 
-func (b *Broker) Publish(chId string, publication *Publication) error {
+func (s *shard) Publish(chId string, publication *Publication) error {
 
 	bytes, err := publication.Marshal()
 	if err != nil {
@@ -313,12 +470,12 @@ func (b *Broker) Publish(chId string, publication *Publication) error {
 	}
 
 	select {
-	case b.pubMessages <- pr:
+	case s.pubMessages <- pr:
 	default:
 		timer := timers.AcquireTimer(time.Second)
 		defer timers.ReleaseTimer(timer)
 		select {
-		case b.pubMessages <- pr:
+		case s.pubMessages <- pr:
 		case <-timer.C:
 			return errors.New("redis timeout")
 		}
@@ -327,7 +484,7 @@ func (b *Broker) Publish(chId string, publication *Publication) error {
 	return nil
 }
 
-func (b *Broker) PublishJoin(chId string, join *Join) error {
+func (s *shard) PublishJoin(chId string, join *Join) error {
 
 	bytes, err := join.Marshal()
 	if err != nil {
@@ -350,12 +507,12 @@ func (b *Broker) PublishJoin(chId string, join *Join) error {
 	}
 
 	select {
-	case b.pubMessages <- pr:
+	case s.pubMessages <- pr:
 	default:
 		timer := timers.AcquireTimer(time.Second)
 		defer timers.ReleaseTimer(timer)
 		select {
-		case b.pubMessages <- pr:
+		case s.pubMessages <- pr:
 		case <-timer.C:
 			return errors.New("redis timeout")
 		}
@@ -364,7 +521,7 @@ func (b *Broker) PublishJoin(chId string, join *Join) error {
 	return nil
 }
 
-func (b *Broker) PublishLeave(chId string, leave *Leave) error {
+func (s *shard) PublishLeave(chId string, leave *Leave) error {
 
 	bytes, err := leave.Marshal()
 	if err != nil {
@@ -384,16 +541,38 @@ func (b *Broker) PublishLeave(chId string, leave *Leave) error {
 	}
 
 	select {
-	case b.pubMessages <- pr:
+	case s.pubMessages <- pr:
 	default:
 		timer := timers.AcquireTimer(time.Second)
 		defer timers.ReleaseTimer(timer)
 		select {
-		case b.pubMessages <- pr:
+		case s.pubMessages <- pr:
 		case <-timer.C:
 			return errors.New("redis timeout")
 		}
 	}
+	return nil
+}
+
+func (s *shard) PublishNode(data []byte) error {
+
+	pr := pubRequest{
+		chId: "sysnodeinfo",
+		data: data,
+	}
+
+	select {
+	case s.pubMessages <- pr:
+	default:
+		timer := timers.AcquireTimer(time.Second)
+		defer timers.ReleaseTimer(timer)
+		select {
+		case s.pubMessages <- pr:
+		case <-timer.C:
+			return errors.New("redis timeout reached")
+		}
+	}
+
 	return nil
 }
 
@@ -419,8 +598,8 @@ type subRequest struct {
 	subscribe bool
 }
 
-func (b *Broker) sendSubRequest(sub *subRequest) {
-	b.subCh <- sub
+func (s *shard) sendSubRequest(sub *subRequest) {
+	s.subCh <- sub
 	return
 }
 

@@ -196,14 +196,12 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if writeTimeout == 0 {
 		writeTimeout = DefaultWebsocketWriteTimeout
 	}
-	messageSizeLimit := s.config.MessageSizeLimit
-	if messageSizeLimit == 0 {
-		messageSizeLimit = DefaultWebsocketMessageSizeLimit
-	}
+	//messageSizeLimit := s.config.MessageSizeLimit
+	//if messageSizeLimit == 0 {
+	messageSizeLimit := DefaultWebsocketMessageSizeLimit
+	//}
 
-	if messageSizeLimit > 0 {
-		conn.SetReadLimit(int64(messageSizeLimit))
-	}
+	conn.SetReadLimit(int64(messageSizeLimit))
 	if pingInterval > 0 {
 		pongWait := pingInterval * 10 / 9
 		_ = conn.SetReadDeadline(time.Now().Add(pongWait))

@@ -36,7 +36,7 @@ func NewChannel(app *App, name string, options *ChannelOptions) *Channel {
 			Messages:    0,
 		},
 		Options: options,
-		Info:    make(map[string]Raw),
+		Info:    make(map[string]*ClientInfo),
 	}
 	return Channel
 }

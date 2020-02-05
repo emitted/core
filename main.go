@@ -10,10 +10,15 @@ import (
 )
 
 var (
-	// getting configuration file
-	config = GetConfig()
-	//
-	node = NewNode(NodeConfig{})
+	node = NewNode(Config{
+		Version:                          "sdf",
+		Name:                             "sdfsdfsdf",
+		ClientChannelLimit:               1000,
+		ClientStaleCloseDelay:            15,
+		NodeInfoMetricsAggregateInterval: 5,
+		LogLevel:                         LogLevelDebug,
+		LogHandler:                       nil,
+	})
 	// wsHandler is used to handle ws connections
 	wsHandler = &WebsocketHandler{
 		config: WebsocketConfig{
@@ -92,7 +97,7 @@ func main() {
 
 	http.Handle("/", mux)
 
-	err := http.ListenAndServe(config.Server.Host+":"+config.Server.Port, nil)
+	err := http.ListenAndServe("localhost:8000", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

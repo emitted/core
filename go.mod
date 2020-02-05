@@ -3,8 +3,11 @@ module github.com/sireax/emitted
 go 1.13
 
 require (
+	github.com/FZambia/eagle v0.0.1
+	github.com/FZambia/sentinel v1.1.0
 	github.com/bmizerany/pat v0.0.0-20170815010413-6226ea591a40
 	github.com/centrifugal/centrifuge v0.4.0
+	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.3.2
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/gorilla/websocket v1.4.1
