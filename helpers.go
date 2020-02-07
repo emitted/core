@@ -21,8 +21,10 @@ func makeChId(appKey string, chName string) string {
 
 func ChannelID(key string) string {
 	switch key {
-	case "PING_TEST_CHANNEL":
+	case "pingchannel":
 		return "ping"
+	case "nodesysinfo":
+		return "node"
 	default:
 		return key
 	}

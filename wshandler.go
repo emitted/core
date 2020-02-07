@@ -1,14 +1,13 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/fasthttp/websocket"
 )
 
 type websocketTransportOptions struct {
@@ -16,7 +15,6 @@ type websocketTransportOptions struct {
 	writeTimeout time.Duration
 }
 
-// WebsocketTransport ...
 type websocketTransport struct {
 	mu        sync.RWMutex
 	conn      *websocket.Conn
@@ -26,7 +24,6 @@ type websocketTransport struct {
 	pingTimer *time.Timer
 }
 
-// NewWebsocketTransport ...
 func newWebsocketTransport(conn *websocket.Conn, options websocketTransportOptions, closeCh chan struct{}) *websocketTransport {
 	transport := &websocketTransport{
 		conn:    conn,
@@ -141,15 +138,15 @@ type WebsocketConfig struct {
 	MessageSizeLimit   int
 }
 
-// WebsocketHandler ...
 type WebsocketHandler struct {
 	config WebsocketConfig
+	node   *Node
 }
 
-// NewWebsocketHandler ...
-func NewWebsocketHandler(c WebsocketConfig) *WebsocketHandler {
+func NewWebsocketHandler(c WebsocketConfig, n *Node) *WebsocketHandler {
 	return &WebsocketHandler{
 		config: c,
+		node:   n,
 	}
 }
 
@@ -219,9 +216,17 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		closeCh := make(chan struct{}, 1)
 		transport := newWebsocketTransport(conn, opts, closeCh)
 
-		ctx := context.Background()
+		select {
+		case <-s.node.NotifyShutdown():
+			transport.Close(DisconnectShutdown)
+			return
+		default:
+		}
 
-		client, err := NewClient(ctx, transport)
+		ctxCh := make(chan struct{})
+		defer close(ctxCh)
+
+		client, err := NewClient(newCustomCancelContext(r.Context(), ctxCh), transport)
 		if err != nil {
 			return
 		}

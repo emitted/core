@@ -158,3 +158,24 @@ func (h *Hub) shutdown(ctx context.Context) error {
 		}
 	}
 }
+
+func (hub *Hub) Channels() []string {
+	channels := make([]string, 0)
+	for _, app := range hub.apps {
+		for ch, _ := range app.Channels {
+			channels = append(channels, ch)
+		}
+	}
+	return channels
+}
+
+func (h *Hub) NumSubscribers(app, ch string) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	_, ok := h.apps[app]
+	if !ok {
+		return 0
+	}
+	conns := h.apps[app].Channels[ch].Clients
+	return len(conns)
+}

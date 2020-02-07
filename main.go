@@ -1,12 +1,10 @@
 package main
 
 import (
+	"github.com/bmizerany/pat"
 	"log"
 	"net/http"
 	"time"
-
-	"github.com/bmizerany/pat"
-	"github.com/sireax/emitted/internal/api"
 )
 
 var (
@@ -19,18 +17,11 @@ var (
 		LogLevel:                         LogLevelDebug,
 		LogHandler:                       nil,
 	})
-	// wsHandler is used to handle ws connections
-	wsHandler = &WebsocketHandler{
-		config: WebsocketConfig{
-			MessageSizeLimit: 100,
-			PingInterval:     time.Second,
-		},
-	}
+	wsHandler = NewWebsocketHandler(WebsocketConfig{MessageSizeLimit: 100, PingInterval: time.Second}, node)
 
 	app = &App{
 		Key:      "Njc4ZGYyZDgtN2ZjMC00ZjAwLWI2OWYtZTZhMGQxYjU4YjQ4",
 		Secret:   "8788369a-227f-11ea-8cb8-1ee2210c29b2",
-		Cluster:  "US",
 		Clients:  make(map[string]*Client, 0),
 		Channels: make(map[string]*Channel, 0),
 		Options: &AppOptions{
@@ -45,60 +36,20 @@ var (
 
 func main() {
 
-	node.Run()
-
-	time.Sleep(time.Second * 5)
-
-	node.Shutdown(customCancelContext{ch: make(chan struct{})})
+	err := node.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	mux := pat.New()
 
 	mux.Get("/ws/:secret", http.HandlerFunc(wsHandler.ServeHTTP))
 
-	mux.Get("/api/:secret/get", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		type Res struct {
-			App         string `json:"app_secret"`
-			Connections int    `json:"connections"`
-		}
-
-		params := r.URL.Query()
-		secret := params.Get(":secret")
-
-		application, err := node.hub.FindApp(secret)
-
-		if err != nil {
-			w.WriteHeader(403)
-			w.Write([]byte("Application does not exist or there is no connections"))
-			return
-		}
-
-		data := api.NewAppInfoResponse(application.Key, application.Secret, application.Stats.Connections, 0).Marshal()
-
-		w.WriteHeader(200)
-		w.Write(data)
-
-	}))
-
-	mux.Post("/api/:secret/push", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		params := r.URL.Query()
-		secret := params.Get(":secret")
-
-		_, err := node.hub.FindApp(secret)
-		if err != nil {
-			w.WriteHeader(403)
-			w.Write([]byte("Application does not exist or there are no connections"))
-			return
-		}
-
-		//node.broker.Enqueue()
-	}))
-
 	http.Handle("/", mux)
 
-	err := http.ListenAndServe("localhost:8000", nil)
+	err = http.ListenAndServe("localhost:8000", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
+
 	}
 }

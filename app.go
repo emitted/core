@@ -5,21 +5,16 @@ import (
 	"sync"
 )
 
-// app structure represents client's application that allows to easily manage channels
-
-// AppOptions ...
 type AppOptions struct {
 	mu             sync.Mutex
 	MaxConnections int
 }
 
-// AppStats ...
 type AppStats struct {
 	Connections int
 	Messages    int
 }
 
-// app ...
 type App struct {
 	Key      string
 	Secret   string

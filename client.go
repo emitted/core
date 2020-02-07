@@ -431,6 +431,18 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return nil
 	}
 
+	_, ok := c.channels[p.Channel]
+	if ok {
+		err := rw.write(&Reply{
+			Error: ErrorAlreadySubscribed,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+
+		return nil
+	}
+
 	var clientInfo ClientInfo
 
 	switch getChannelType(p.Channel) {
@@ -480,23 +492,14 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	default:
 	}
 
-	_, ok := c.channels[p.Channel]
-	if ok {
-		err := rw.write(&Reply{
-			Error: ErrorAlreadySubscribed,
-		})
-		if err != nil {
-			return DisconnectWriteError
-		}
-
-		return nil
-	}
-
 	first := c.app.addSub(p.Channel, c, &clientInfo)
 	chId := makeChId(c.app.Key, p.Channel)
 
 	if first {
-		node.broker.Subscribe(chId)
+		err := node.broker.Subscribe(chId)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	c.Subscribe(p.Channel)

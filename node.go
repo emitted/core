@@ -48,7 +48,7 @@ func handleLog(e centrifuge.LogEntry) {
 	log.Printf("%s: %v", e.Message, e.Fields)
 }
 
-func (n *Node) notifyShutdown() chan struct{} {
+func (n *Node) NotifyShutdown() chan struct{} {
 	return n.shutdownCh
 }
 
@@ -103,7 +103,7 @@ func (n *Node) updateMetrics() {
 	ticker := time.NewTicker(time.Second * 10)
 	for {
 		select {
-		case <-n.notifyShutdown():
+		case <-n.NotifyShutdown():
 			ticker.Stop()
 			return
 		case <-ticker.C:
@@ -145,7 +145,7 @@ func (n *Node) initMetrics() error {
 	go func() {
 		for {
 			select {
-			case <-n.notifyShutdown():
+			case <-n.NotifyShutdown():
 				return
 			case metrics := <-metricsSink:
 				n.metricsMu.Lock()

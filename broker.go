@@ -5,11 +5,18 @@ import (
 	"github.com/sireax/emitted/internal/timers"
 	"log"
 	"net"
-	"runtime"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
+)
+
+const (
+	defaultReadTimeout    = time.Second
+	defaultWriteTimeout   = time.Second
+	defaultConnectTimeout = time.Second
+	defaultPoolSize       = 256
 )
 
 // Broker structure represents message broker, connected with API
@@ -28,7 +35,7 @@ type shard struct {
 	broker      *Broker
 	config      BrokerShardConfig
 	pool        *redis.Pool
-	subCh       chan *subRequest
+	subCh       chan subRequest
 	subMessages chan redis.Message
 	pubMessages chan pubRequest
 }
@@ -67,10 +74,6 @@ func NewBroker(n *Node, config BrokerConfig) (*Broker, error) {
 		return nil, errors.New("no Redis shards provided in configuration")
 	}
 
-	if len(config.Shards) > 1 {
-		log.Println("sharding", len(config.Shards), "instances")
-	}
-
 	for _, conf := range config.Shards {
 		shard, err := newShard(n, conf)
 		if err != nil {
@@ -86,8 +89,8 @@ func NewBroker(n *Node, config BrokerConfig) (*Broker, error) {
 	}, nil
 }
 
-func (b *Broker) Subscribe(chId string) {
-	b.getShard(chId).Subscribe([]string{chId})
+func (b *Broker) Subscribe(chId string) error {
+	return b.getShard(chId).Subscribe([]string{chId})
 }
 
 func (b *Broker) Unsubscribe(chId string) {
@@ -122,12 +125,9 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 
 	serverAddr := net.JoinHostPort(host, strconv.Itoa(port))
 
-	poolSize := runtime.NumCPU()
+	poolSize := defaultPoolSize
 
 	maxIdle := 64
-	if poolSize < maxIdle {
-		maxIdle = poolSize
-	}
 
 	return &redis.Pool{
 		MaxIdle:     maxIdle,
@@ -137,15 +137,15 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 		Dial: func() (redis.Conn, error) {
 			var err error
 
-			var readTimeout = time.Second
+			var readTimeout = defaultReadTimeout
 			if conf.ReadTimeout != 0 {
 				readTimeout = conf.ReadTimeout
 			}
-			var writeTimeout = time.Second
+			var writeTimeout = defaultWriteTimeout
 			if conf.WriteTimeout != 0 {
 				writeTimeout = conf.WriteTimeout
 			}
-			var connectTimeout = time.Second * 30
+			var connectTimeout = defaultConnectTimeout
 			if conf.ConnectTimeout != 0 {
 				connectTimeout = conf.ConnectTimeout
 			}
@@ -201,7 +201,7 @@ func newShard(n *Node, conf BrokerShardConfig) (*shard, error) {
 		pool:   newPool(n, conf),
 	}
 	shard.pubMessages = make(chan pubRequest)
-	shard.subCh = make(chan *subRequest)
+	shard.subCh = make(chan subRequest)
 	shard.subMessages = make(chan redis.Message)
 	return shard, nil
 }
@@ -247,7 +247,7 @@ func (s *shard) runPublishPipeline() {
 		select {
 		case <-pingTicker.C:
 			conn := s.pool.Get()
-			err := conn.Send("PUBLISH", "PING_TEST_CHANNEL", nil)
+			err := conn.Send("PUBLISH", "pingchannel", nil)
 			if err != nil {
 				log.Fatal(err)
 				conn.Close()
@@ -272,6 +272,7 @@ func (s *shard) runPublishPipeline() {
 			conn := s.pool.Get()
 			for i := range prs {
 				conn.Send("PUBLISH", prs[i].chId, prs[i].data)
+				prs[i].done(nil)
 			}
 			err := conn.Flush()
 			if err != nil {
@@ -290,36 +291,103 @@ func (s *shard) runPublishPipeline() {
 
 func (s *shard) runPubSub() {
 	conn := s.pool.Get()
+	if conn.Err() != nil {
+		conn.Close()
+		return
+	}
 
 	psc := &redis.PubSubConn{
 		Conn: conn,
 	}
 
-	err := psc.Subscribe("PING_TEST_CHANNEL")
+	err := psc.Subscribe("pingchannel")
 	if err != nil {
 		log.Fatalln("Something wrong with the ping channel: ", err)
 	}
+
+	done := make(chan struct{})
+	var doneOnce sync.Once
+	closeDoneOnce := func() {
+		doneOnce.Do(func() {
+			close(done)
+		})
+	}
+	defer closeDoneOnce()
 
 	// handling sub/unsub requests
 	go func() {
 		for {
 			select {
+			case <-done:
+				psc.Close()
+				return
 			case r := <-s.subCh:
-				if r.subscribe == true {
-					for _, channel := range r.channels {
-						err := psc.Subscribe(channel)
-						if err != nil {
-							log.Fatal("error while subscribing to channel: ", err)
-						}
-					}
-				} else {
-					for _, channel := range r.channels {
-						err := psc.Unsubscribe(channel)
+				isSubscribe := r.subscribe
+				channelBatch := []subRequest{r}
 
-						if err != nil {
-							log.Fatal("error while unsubscribing from channel: ", err)
+				chIDs := make([]interface{}, 0, len(r.channels))
+				for _, ch := range r.channels {
+					chIDs = append(chIDs, ch)
+				}
+
+				var otherR *subRequest
+
+			loop:
+
+				for len(chIDs) < 512 {
+					select {
+					case r := <-s.subCh:
+						if r.subscribe != isSubscribe {
+							otherR = &r
+							break loop
 						}
+						channelBatch = append(channelBatch, r)
+						for _, ch := range r.channels {
+							chIDs = append(chIDs, ch)
+						}
+					default:
+						break loop
 					}
+				}
+
+				var opErr error
+				if isSubscribe {
+					opErr = psc.Subscribe(chIDs...)
+				} else {
+					opErr = psc.Unsubscribe(chIDs...)
+				}
+
+				if opErr != nil {
+					for _, r := range channelBatch {
+						r.done(opErr)
+					}
+					if otherR != nil {
+						otherR.done(opErr)
+					}
+					psc.Close()
+					return
+				}
+				for _, r := range channelBatch {
+					r.done(nil)
+				}
+
+				if otherR != nil {
+					chIDs := make([]interface{}, 0, len(otherR.channels))
+					for _, ch := range otherR.channels {
+						chIDs = append(chIDs, ch)
+					}
+					var opErr error
+					if otherR.subscribe {
+						opErr = psc.Subscribe(chIDs...)
+					} else {
+						opErr = psc.Unsubscribe(chIDs...)
+					}
+					if opErr != nil {
+						otherR.done(opErr)
+						psc.Close()
+						return
+					}
+					otherR.done(nil)
 				}
 			}
 		}
@@ -377,6 +445,41 @@ func (s *shard) runPubSub() {
 		}()
 	}
 
+	go func() {
+		chIDs := make([]string, 2)
+		chIDs[0] = "pingchannel"
+		chIDs[1] = "sysnodeinfo"
+
+		for _, ch := range s.node.hub.Channels() {
+			if s.broker.getShard(ch) == s {
+				chIDs = append(chIDs, ch)
+			}
+		}
+
+		batch := make([]string, 0)
+
+		for i, ch := range chIDs {
+			if len(batch) > 0 && i%512 == 0 {
+				r := newSubRequest(batch, true)
+				err := s.sendSubRequest(r)
+				if err != nil {
+					closeDoneOnce()
+					return
+				}
+				batch = nil
+			}
+			batch = append(batch, ch)
+		}
+		if len(batch) > 0 {
+			r := newSubRequest(batch, true)
+			err := s.sendSubRequest(r)
+			if err != nil {
+				closeDoneOnce()
+				return
+			}
+		}
+	}()
+
 	// listening for new subMessages from pub/sub
 	for {
 		switch m := psc.ReceiveWithTimeout(10 * time.Second).(type) {
@@ -389,15 +492,15 @@ func (s *shard) runPubSub() {
 }
 
 // HandleSubscribe ...
-func (s *shard) Subscribe(channels []string) {
+func (s *shard) Subscribe(channels []string) error {
 	sub := newSubRequest(channels, true)
-	s.sendSubRequest(sub)
+	return s.sendSubRequest(sub)
 }
 
 // HandleUnsubscribe ...
-func (s *shard) Unsubscribe(channels []string) {
+func (s *shard) Unsubscribe(channels []string) error {
 	sub := newSubRequest(channels, false)
-	s.sendSubRequest(sub)
+	return s.sendSubRequest(sub)
 }
 
 func (s *shard) handlePublish(chId string, c *Client, p *PublishRequest) error {
@@ -419,7 +522,7 @@ func (s *shard) handleSubscribe(chId string, r *SubscribeRequest, info *ClientIn
 		Channel: r.Channel,
 	}
 
-	if info != nil {
+	if len(info.Info) > 0 {
 		join.Data = info
 	}
 
@@ -448,6 +551,7 @@ func (s *shard) handleUnsubscribe(chId string, r *UnsubscribeRequest, info *Clie
 */
 
 func (s *shard) Publish(chId string, publication *Publication) error {
+	eChan := make(chan error, 1)
 
 	bytes, err := publication.Marshal()
 	if err != nil {
@@ -467,6 +571,7 @@ func (s *shard) Publish(chId string, publication *Publication) error {
 	pr := pubRequest{
 		chId: chId,
 		data: payload,
+		err:  eChan,
 	}
 
 	select {
@@ -481,10 +586,12 @@ func (s *shard) Publish(chId string, publication *Publication) error {
 		}
 	}
 
-	return nil
+	return <-eChan
 }
 
 func (s *shard) PublishJoin(chId string, join *Join) error {
+	log.Println("publish handled")
+	eChan := make(chan error, 1)
 
 	bytes, err := join.Marshal()
 	if err != nil {
@@ -504,6 +611,7 @@ func (s *shard) PublishJoin(chId string, join *Join) error {
 	pr := pubRequest{
 		chId: chId,
 		data: payload,
+		err:  eChan,
 	}
 
 	select {
@@ -518,10 +626,11 @@ func (s *shard) PublishJoin(chId string, join *Join) error {
 		}
 	}
 
-	return nil
+	return <-eChan
 }
 
 func (s *shard) PublishLeave(chId string, leave *Leave) error {
+	eChan := make(chan error, 1)
 
 	bytes, err := leave.Marshal()
 	if err != nil {
@@ -538,6 +647,7 @@ func (s *shard) PublishLeave(chId string, leave *Leave) error {
 	pr := pubRequest{
 		chId: chId,
 		data: payload,
+		err:  eChan,
 	}
 
 	select {
@@ -551,14 +661,16 @@ func (s *shard) PublishLeave(chId string, leave *Leave) error {
 			return errors.New("redis timeout")
 		}
 	}
-	return nil
+	return <-eChan
 }
 
 func (s *shard) PublishNode(data []byte) error {
+	eChan := make(chan error, 1)
 
 	pr := pubRequest{
 		chId: "sysnodeinfo",
 		data: data,
+		err:  eChan,
 	}
 
 	select {
@@ -573,7 +685,7 @@ func (s *shard) PublishNode(data []byte) error {
 		}
 	}
 
-	return nil
+	return <-eChan
 }
 
 /*
@@ -587,25 +699,67 @@ func (s *shard) PublishNode(data []byte) error {
 type pubRequest struct {
 	chId string
 	data []byte
+	err  chan error
 }
 
-func (r pubRequest) done(err error) {
+func (pr *pubRequest) done(err error) {
+	pr.err <- err
+}
 
+func (pr *pubRequest) result() error {
+	return <-pr.err
+}
+
+func (s *shard) sendPubRequest(pub pubRequest) error {
+	select {
+	case s.pubMessages <- pub:
+	default:
+		timer := timers.AcquireTimer(time.Second)
+		defer timers.ReleaseTimer(timer)
+		select {
+		case s.pubMessages <- pub:
+		case <-timer.C:
+			return errors.New("redis timeout")
+
+		}
+	}
+
+	return pub.result()
 }
 
 type subRequest struct {
 	channels  []string
 	subscribe bool
+	err       chan error
 }
 
-func (s *shard) sendSubRequest(sub *subRequest) {
-	s.subCh <- sub
-	return
+func (sr *subRequest) done(err error) {
+	sr.err <- err
 }
 
-func newSubRequest(channels []string, subscribe bool) *subRequest {
-	return &subRequest{
+func (sr *subRequest) result() error {
+	return <-sr.err
+}
+
+func (s *shard) sendSubRequest(sub subRequest) error {
+	select {
+	case s.subCh <- sub:
+	default:
+		timer := timers.AcquireTimer(time.Second)
+		defer timers.ReleaseTimer(timer)
+		select {
+		case s.subCh <- sub:
+		case <-timer.C:
+			return errors.New("redis timeout")
+		}
+	}
+	return sub.result()
+}
+
+func newSubRequest(channels []string, subscribe bool) subRequest {
+	return subRequest{
 		channels:  channels,
 		subscribe: subscribe,
+		err:       make(chan error, 1),
 	}
 }
