@@ -7,7 +7,7 @@ import (
 
 var timerPool sync.Pool
 
-func AcquireTimer(d time.Duration) *time.Timer {
+func SetTimer(d time.Duration) *time.Timer {
 	v := timerPool.Get()
 	if v == nil {
 		return time.NewTimer(d)

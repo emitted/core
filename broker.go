@@ -97,8 +97,8 @@ func (b *Broker) Unsubscribe(chId string) {
 	b.getShard(chId).Unsubscribe([]string{chId})
 }
 
-func (b *Broker) Publish(ch string, c *Client, p *PublishRequest) error {
-	return b.getShard(ch).handlePublish(ch, c, p)
+func (b *Broker) Publish(ch string, cInfo *ClientInfo, p *PublishRequest) error {
+	return b.getShard(ch).handlePublish(ch, cInfo, p)
 }
 
 func (b *Broker) HandleSubscribe(chId string, r *SubscribeRequest, p *ClientInfo) error {
@@ -503,16 +503,17 @@ func (s *shard) Unsubscribe(channels []string) error {
 	return s.sendSubRequest(sub)
 }
 
-func (s *shard) handlePublish(chId string, c *Client, p *PublishRequest) error {
+func (s *shard) handlePublish(chId string, cInfo *ClientInfo, p *PublishRequest) error {
 
-	publication := &Publication{
+	pub := &Publication{
 		Data: p.Data,
-		Info: &ClientInfo{
-			Id: "random user",
-		},
 	}
 
-	return s.Publish(chId, publication)
+	if cInfo != nil {
+		pub.Info = cInfo
+	}
+
+	return s.Publish(chId, pub)
 
 }
 
@@ -577,7 +578,7 @@ func (s *shard) Publish(chId string, publication *Publication) error {
 	select {
 	case s.pubMessages <- pr:
 	default:
-		timer := timers.AcquireTimer(time.Second)
+		timer := timers.SetTimer(time.Second)
 		defer timers.ReleaseTimer(timer)
 		select {
 		case s.pubMessages <- pr:
@@ -617,7 +618,7 @@ func (s *shard) PublishJoin(chId string, join *Join) error {
 	select {
 	case s.pubMessages <- pr:
 	default:
-		timer := timers.AcquireTimer(time.Second)
+		timer := timers.SetTimer(time.Second)
 		defer timers.ReleaseTimer(timer)
 		select {
 		case s.pubMessages <- pr:
@@ -653,7 +654,7 @@ func (s *shard) PublishLeave(chId string, leave *Leave) error {
 	select {
 	case s.pubMessages <- pr:
 	default:
-		timer := timers.AcquireTimer(time.Second)
+		timer := timers.SetTimer(time.Second)
 		defer timers.ReleaseTimer(timer)
 		select {
 		case s.pubMessages <- pr:
@@ -676,7 +677,7 @@ func (s *shard) PublishNode(data []byte) error {
 	select {
 	case s.pubMessages <- pr:
 	default:
-		timer := timers.AcquireTimer(time.Second)
+		timer := timers.SetTimer(time.Second)
 		defer timers.ReleaseTimer(timer)
 		select {
 		case s.pubMessages <- pr:
@@ -714,7 +715,7 @@ func (s *shard) sendPubRequest(pub pubRequest) error {
 	select {
 	case s.pubMessages <- pub:
 	default:
-		timer := timers.AcquireTimer(time.Second)
+		timer := timers.SetTimer(time.Second)
 		defer timers.ReleaseTimer(timer)
 		select {
 		case s.pubMessages <- pub:
@@ -745,7 +746,7 @@ func (s *shard) sendSubRequest(sub subRequest) error {
 	select {
 	case s.subCh <- sub:
 	default:
-		timer := timers.AcquireTimer(time.Second)
+		timer := timers.SetTimer(time.Second)
 		defer timers.ReleaseTimer(timer)
 		select {
 		case s.subCh <- sub:

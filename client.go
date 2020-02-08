@@ -602,14 +602,16 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 			Error: ErrorPermissionDenied,
 		})
 		if err != nil {
-			return DisconnectServerError
+			return DisconnectWriteError
 		}
 		return nil
 	}
 
+	cInfo := c.clientInfo(p.Channel)
+
 	chId := makeChId(c.app.Key, p.Channel)
 
-	err = node.broker.Publish(chId, c, p)
+	err = node.broker.Publish(chId, cInfo, p)
 	if err != nil {
 		log.Fatal(err)
 	}
