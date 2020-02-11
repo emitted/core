@@ -1,4 +1,4 @@
-package main
+package core
 
 import "time"
 
@@ -8,14 +8,13 @@ type Config struct {
 	ClientChannelLimit    int
 	ClientStaleCloseDelay time.Duration
 
+	ChannelMaxLength   int
+	ClientQueueMaxSize int
+
 	NodeInfoMetricsAggregateInterval time.Duration
 
 	LogLevel   LogLevel
 	LogHandler LogHandler
-}
-
-func (c *Config) Validate() {
-
 }
 
 var DefaultConfig = Config{

@@ -1,6 +1,6 @@
-package main
+package core
 
-import protocol "github.com/sireax/emitted/internal/proto"
+import protocol "github.com/sireax/core/internal/proto"
 
 type (
 	Raw = protocol.Raw

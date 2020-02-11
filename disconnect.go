@@ -1,4 +1,4 @@
-package main
+package core
 
 // Disconnect type makes it easy to disconnect
 type Disconnect struct {

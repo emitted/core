@@ -1,12 +1,12 @@
-package main
+package core
 
 import (
 	"context"
 	"github.com/FZambia/eagle"
 	"github.com/centrifugal/centrifuge"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sireax/emitted/internal/sysproto"
-	"github.com/sireax/emitted/internal/uuid"
+	"github.com/sireax/core/internal/sysproto"
+	"github.com/sireax/core/internal/uuid"
 	"log"
 	"sync"
 	"time"
@@ -53,7 +53,7 @@ func (n *Node) NotifyShutdown() chan struct{} {
 }
 
 // NewNode ...
-func NewNode(c Config) *Node {
+func NewNode(c Config, brokerConfig *BrokerConfig) *Node {
 	uid := uuid.Must(uuid.NewV4()).String()
 
 	subLocks := make(map[int]*sync.Mutex, numSubLocks)
@@ -77,7 +77,7 @@ func NewNode(c Config) *Node {
 		subLocks: subLocks,
 	}
 
-	broker, err := NewBroker(n, BrokerConfig{Shards: make([]BrokerShardConfig, 2)})
+	broker, err := NewBroker(n, brokerConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,8 +107,8 @@ func (n *Node) updateMetrics() {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			n.metrics.channels = n.hub.numConnections
-			n.metrics.clients = n.hub.numClients
+			//n.metrics.channels = n.hub.numConnections
+			//n.metrics.clients = n.hub.numClients
 		}
 	}
 }
@@ -222,14 +222,10 @@ func (n *Node) getMetrics(metrics eagle.Metrics) *sysproto.Metrics {
 }
 
 type nodeRegistry struct {
-	// mu allows to synchronize access to node registry.
-	mu sync.RWMutex
-	// currentUID keeps uid of current node
+	mu         sync.RWMutex
 	currentUID string
-	// nodes is a map with information about known nodes.
-	nodes map[string]sysproto.Node
-	// updates track time we last received ping from node. Used to clean up nodes map.
-	updates map[string]int64
+	nodes      map[string]sysproto.Node
+	updates    map[string]int64
 }
 
 func newNodeRegistry(currentUID string) *nodeRegistry {

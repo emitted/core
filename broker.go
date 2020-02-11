@@ -1,8 +1,8 @@
-package main
+package core
 
 import (
 	"errors"
-	"github.com/sireax/emitted/internal/timers"
+	"github.com/sireax/core/internal/timers"
 	"log"
 	"net"
 	"strconv"
@@ -23,7 +23,7 @@ const (
 type Broker struct {
 	node   *Node
 	shards []*shard
-	config BrokerConfig
+	config *BrokerConfig
 }
 
 type BrokerConfig struct {
@@ -41,32 +41,22 @@ type shard struct {
 }
 
 type BrokerShardConfig struct {
-	Host string
-	// Port is Redis server port.
-	Port int
-	// Password is password to use when connecting to Redis database. If empty then password not used.
-	Password string
-	// DB is Redis database number. If not set then database 0 used.
-	DB int
-	// MasterName is a name of Redis instance master Sentinel monitors.
-	MasterName string
-	// IdleTimeout is timeout after which idle connections to Redis will be closed.
-	IdleTimeout time.Duration
-	// PubSubNumWorkers sets how many PUB/SUB message processing workers will be started.
-	// By default we start runtime.NumCPU() workers.
+	Host             string
+	Port             int
+	Password         string
+	DB               int
+	UseTLS           bool
+	TLSSkipVerify    bool
+	MasterName       string
+	IdleTimeout      time.Duration
 	PubSubNumWorkers int
-	// ReadTimeout is a timeout on read operations. Note that at moment it should be greater
-	// than node ping publish interval in order to prevent timing out Pubsub connection's
-	// Receive call.
-	ReadTimeout time.Duration
-	// WriteTimeout is a timeout on write operations.
-	WriteTimeout time.Duration
-	// ConnectTimeout is a timeout on connect operation.
-	ConnectTimeout time.Duration
+	ReadTimeout      time.Duration
+	WriteTimeout     time.Duration
+	ConnectTimeout   time.Duration
 }
 
 // NewBroker function initializes BrokerMessage Broker
-func NewBroker(n *Node, config BrokerConfig) (*Broker, error) {
+func NewBroker(n *Node, config *BrokerConfig) (*Broker, error) {
 
 	var shards []*shard
 
@@ -420,7 +410,7 @@ func (s *shard) runPubSub() {
 								continue
 							}
 
-							node.hub.BroadcastMessage(appKey, channelName, &pub)
+							s.node.hub.BroadcastMessage(appKey, channelName, &pub)
 
 						case PushTypeJoin:
 							var join Join
@@ -429,7 +419,7 @@ func (s *shard) runPubSub() {
 								log.Fatal(err)
 							}
 
-							node.hub.BroadcastJoin(appKey, &join)
+							s.node.hub.BroadcastJoin(appKey, &join)
 						case PushTypeLeave:
 							var leave Leave
 							err := leave.Unmarshal(push.Data)
@@ -437,7 +427,7 @@ func (s *shard) runPubSub() {
 								log.Fatal(err)
 							}
 
-							node.hub.BroadcastLeave(appKey, &leave)
+							s.node.hub.BroadcastLeave(appKey, &leave)
 						}
 					}
 				}

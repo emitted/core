@@ -1,11 +1,11 @@
-package main
+package core
 
 import (
 	// "encoding/json"
 
 	"context"
-	protocol "github.com/sireax/emitted/internal/proto"
-	"github.com/sireax/emitted/internal/uuid"
+	protocol "github.com/sireax/core/internal/proto"
+	"github.com/sireax/core/internal/uuid"
 	"log"
 	"sync"
 	"time"
@@ -13,8 +13,7 @@ import (
 
 // Client ...
 type Client struct {
-	mu         sync.RWMutex
-	presenceMu sync.Mutex
+	mu sync.RWMutex
 
 	ctx  context.Context
 	node *Node
@@ -33,18 +32,14 @@ type Client struct {
 	messageWriter *writer
 	transport     *websocketTransport
 
-	pubBuffer []*Publication
-
 	expireTimer *time.Timer
 	exp         int64
 
 	staleTimer *time.Timer
-
-	info Raw
 }
 
 // NewClient ...
-func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
+func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, error) {
 
 	uuid, _ := uuid.NewV4()
 
@@ -53,10 +48,10 @@ func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 	client := &Client{
 		ctx:           ctx,
 		uid:           uuid.String(),
+		node:          n,
 		channels:      make(map[string]*Channel),
 		transport:     t,
 		authenticated: false,
-		pubBuffer:     make([]*Publication, 0),
 	}
 
 	// Creating message writer config
@@ -84,19 +79,24 @@ func NewClient(ctx context.Context, t *websocketTransport) (*Client, error) {
 	client.messageWriter = newWriter(messageWriterConf)
 
 	if !client.authenticated {
-		client.staleTimer = time.AfterFunc(time.Second*2, client.CloseUnauthenticated)
+		client.staleTimer = time.AfterFunc(time.Second*15, client.CloseUnauthenticated)
 	}
 
 	return client, nil
 }
 
 func (c *Client) clientInfo(ch string) *ClientInfo {
+	c.mu.RLock()
 	channel, ok := c.channels[ch]
+	c.mu.RUnlock()
 	if !ok {
 		return nil
 	}
 
+	channel.infoMu.Lock()
 	info, ok := channel.Info[c.uid]
+	channel.infoMu.Unlock()
+
 	if !ok {
 		return nil
 	}
@@ -110,21 +110,40 @@ func (c *Client) CloseUnauthenticated() {
 	c.mu.RUnlock()
 
 	if !auth {
-		c.Close(DisconnectExpired)
+		c.Close(DisconnectStale)
 	}
 }
 
-// Connect ...
 func (c *Client) Connect(app *App) {
 
-	node.hub.AddApp(app)
+	c.mu.Lock()
 	c.app = app
+	c.mu.Unlock()
 
+	app.mu.Lock()
 	app.Clients[c.uid] = c
-	app.Stats.Connections++
+	app.mu.Unlock()
+
+	app.Stats.IncrementConns()
+
 }
 
-// HandleSubscribe ...
+func (c *Client) Disconnect() {
+
+	log.Println("entrance")
+	c.app.mu.Lock()
+	delete(c.app.Clients, c.uid)
+	c.app.mu.Unlock()
+	log.Println("finish")
+
+	c.app.Stats.DecrementConns()
+
+	if len(c.app.Channels) == 0 && c.app.Stats.getConns() == 0 {
+		delete(c.node.hub.apps, c.app.Key)
+	}
+
+}
+
 func (c *Client) Subscribe(ch string) {
 	c.mu.RLock()
 	if c.closed {
@@ -135,7 +154,9 @@ func (c *Client) Subscribe(ch string) {
 	c.mu.RUnlock()
 
 	if ok {
+		c.mu.Lock()
 		c.channels[ch] = channel
+		c.mu.Unlock()
 	}
 
 }
@@ -162,12 +183,12 @@ func (c *Client) unsubscribeForce(ch string) {
 		delete(c.channels, ch)
 		c.mu.Unlock()
 
-		chId := makeChId(c.app.Key, ch)
+		chId := makeChId(c.app.Secret, ch)
 
 		last, err := c.app.removeSub(ch, c)
 		if last {
 
-			node.broker.Unsubscribe(chId)
+			c.node.broker.Unsubscribe(chId)
 
 			return
 		}
@@ -180,7 +201,7 @@ func (c *Client) unsubscribeForce(ch string) {
 			leave.Info = c.clientInfo(ch)
 		}
 
-		err = node.broker.PublishLeave(chId, leave)
+		err = c.node.broker.PublishLeave(chId, leave)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -209,8 +230,6 @@ func (c *Client) Expire() {
 }
 
 func (c *Client) Close(disconnect *Disconnect) {
-	//c.presenceMu.Lock()
-	//defer c.presenceMu.Unlock()
 	c.mu.Lock()
 
 	if c.closed {
@@ -219,20 +238,21 @@ func (c *Client) Close(disconnect *Disconnect) {
 	}
 	c.closed = true
 
-	channels := make([]string, len(c.channels))
+	authenticated := c.authenticated
+	c.mu.Unlock()
 
+	log.Println(c.channels)
+	channels := make([]string, 0)
 	for channel := range c.channels {
 		channels = append(channels, channel)
 	}
 
-	c.mu.Unlock()
+	if authenticated {
+		for _, channel := range channels {
+			c.unsubscribeForce(channel)
+		}
 
-	for _, channel := range channels {
-		c.unsubscribeForce(channel)
-	}
-
-	if len(c.app.Channels) == 0 {
-		delete(node.hub.apps, c.app.Key)
+		c.Disconnect()
 	}
 
 	if c.expireTimer != nil {
@@ -243,7 +263,6 @@ func (c *Client) Close(disconnect *Disconnect) {
 	if err != nil {
 		//	todo: log this
 	}
-	delete(c.app.Clients, c.uid)
 
 	err = c.transport.Close(disconnect)
 	if err != nil {
@@ -340,7 +359,7 @@ func (c *Client) HandleCommand(cmd *Command) *Disconnect {
 		disconnect = c.handlePing(cmd.Data, rw)
 	default:
 		err := rw.write(&Reply{
-			Error: ErrorBadRequest,
+			Error: ErrorMethodNotFound,
 		})
 		if err != nil {
 			return DisconnectWriteError
@@ -352,16 +371,12 @@ func (c *Client) HandleCommand(cmd *Command) *Disconnect {
 }
 
 func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
-	var disconnect *Disconnect
 
-	p, err := protocol.NewProtobufParamsDecoder().DecodeConnect(data)
-	if err != nil {
-		return DisconnectBadRequest
-	}
-
-	if p.Version == "" {
+	c.mu.RLock()
+	if c.authenticated {
+		c.mu.RUnlock()
 		err := rw.write(&Reply{
-			Error: ErrorBadRequest,
+			Error: ErrorAlreadyAuthorized,
 		})
 		if err != nil {
 			return DisconnectWriteError
@@ -369,6 +384,32 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 
 		return nil
 	}
+	c.mu.RUnlock()
+
+	var disconnect *Disconnect
+
+	p, err := protocol.NewProtobufParamsDecoder().DecodeConnect(data)
+	if err != nil {
+		log.Println(err)
+		return DisconnectBadRequest
+	}
+
+	if p.App == "" {
+		log.Println(err)
+		return DisconnectBadRequest
+	}
+
+	if p.Version == "" {
+		log.Println(err)
+		return DisconnectBadRequest
+	}
+
+	app, err := GetApp(c.node, p.App)
+	if err != nil {
+		return DisconnectBadRequest
+	}
+
+	c.Connect(app)
 
 	c.mu.RLock()
 	c.authenticated = true
@@ -407,6 +448,21 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 }
 
 func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
+
+	c.mu.RLock()
+	if !c.authenticated {
+		c.mu.RUnlock()
+		err := rw.write(&Reply{
+			Error: ErrorUnauthorized,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+
+		return nil
+	}
+	c.mu.RUnlock()
+
 	var disconnect *Disconnect
 
 	p, err := protocol.NewProtobufParamsDecoder().DecodeSubscribe(data)
@@ -431,7 +487,10 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return nil
 	}
 
+	c.mu.RLock()
 	_, ok := c.channels[p.Channel]
+	c.mu.RUnlock()
+
 	if ok {
 		err := rw.write(&Reply{
 			Error: ErrorAlreadySubscribed,
@@ -493,20 +552,23 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	first := c.app.addSub(p.Channel, c, &clientInfo)
-	chId := makeChId(c.app.Key, p.Channel)
+	chId := makeChId(c.app.Secret, p.Channel)
+
+	c.Subscribe(p.Channel)
 
 	if first {
-		err := node.broker.Subscribe(chId)
+		err := c.node.broker.Subscribe(chId)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	c.Subscribe(p.Channel)
-
-	err = node.broker.HandleSubscribe(chId, p, &clientInfo)
-	if err != nil {
-		log.Fatal(err)
+	if c.app.Options.JoinLeave {
+		log.Println("publishing join")
+		err = c.node.broker.HandleSubscribe(chId, p, &clientInfo)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	res := &SubscribeResult{
@@ -525,6 +587,21 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 }
 
 func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
+
+	c.mu.RLock()
+	if !c.authenticated {
+		c.mu.RUnlock()
+		err := rw.write(&Reply{
+			Error: ErrorUnauthorized,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+
+		return nil
+	}
+	c.mu.RUnlock()
+
 	var disconnect *Disconnect
 
 	p, err := protocol.NewProtobufParamsDecoder().DecodeUnsubscribe(data)
@@ -554,7 +631,7 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	last, err := c.app.removeSub(p.Channel, c)
 
-	chId := makeChId(c.app.Key, p.Channel)
+	chId := makeChId(c.app.Secret, p.Channel)
 	usr := &UnsubscribeRequest{
 		Channel: p.Channel,
 	}
@@ -563,13 +640,12 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	info = c.clientInfo(p.Channel)
 
 	if !last {
-		err = node.broker.HandleUnsubscribe(chId, usr, info)
+		err = c.node.broker.HandleUnsubscribe(chId, usr, info)
 		if err != nil {
 			log.Fatal(err)
 		}
 	} else {
-		log.Println("This was last user")
-		node.broker.Unsubscribe(chId)
+		c.node.broker.Unsubscribe(chId)
 	}
 
 	c.Unsubscribe(p.Channel)
@@ -588,6 +664,20 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 }
 
 func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
+
+	c.mu.RLock()
+	if !c.authenticated {
+		c.mu.RUnlock()
+		err := rw.write(&Reply{
+			Error: ErrorUnauthorized,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+
+		return nil
+	}
+	c.mu.RUnlock()
 
 	var disconnect *Disconnect
 
@@ -609,9 +699,8 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 
 	cInfo := c.clientInfo(p.Channel)
 
-	chId := makeChId(c.app.Key, p.Channel)
-
-	err = node.broker.Publish(chId, cInfo, p)
+	chId := makeChId(c.app.Secret, p.Channel)
+	err = c.node.broker.Publish(chId, cInfo, p)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -631,6 +720,20 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 
 func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 
+	c.mu.RLock()
+	if !c.authenticated {
+		c.mu.RUnlock()
+		err := rw.write(&Reply{
+			Error: ErrorUnauthorized,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+
+		return nil
+	}
+	c.mu.RUnlock()
+
 	var disconnect *Disconnect
 
 	p, err := protocol.NewProtobufParamsDecoder().DecodePresence(data)
@@ -647,19 +750,36 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 		}
 	}
 
+	switch getChannelType(p.Channel) {
+	case "presence":
+	default:
+		err := rw.write(&Reply{
+			Error: ErrorChannelNotPresence,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+	}
+
+	c.mu.Lock()
 	ch, ok := c.channels[p.Channel]
+	c.mu.Unlock()
+
 	if !ok {
 		err := rw.write(&Reply{
 			Error: ErrorPermissionDenied,
 		})
 		if err != nil {
-			return DisconnectServerError
+			return DisconnectWriteError
 		}
 	}
 
 	presence := make(map[string]*ClientInfo, len(ch.Info))
 
-	for uid, info := range ch.Info {
+	ch.infoMu.Lock()
+	chUsersInfo := ch.Info
+	ch.infoMu.Unlock()
+	for uid, info := range chUsersInfo {
 		presence[uid] = info
 	}
 

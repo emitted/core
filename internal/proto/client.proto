@@ -82,9 +82,10 @@ enum ClientType {
 }
 
 message ConnectRequest {
-    ClientType client = 1;
-    string version = 2;
-    bytes data = 3;
+    string app = 1;
+    ClientType client = 2;
+    string version = 3;
+    bytes data = 4;
 }
 
 message PingRequest {

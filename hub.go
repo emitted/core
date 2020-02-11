@@ -1,50 +1,34 @@
-package main
+package core
 
 import (
 	"context"
-	"errors"
 	"log"
 	"sync"
 )
 
 // Hub struct contains all data and structs of clients,channels etc.
 type Hub struct {
-	mu             sync.RWMutex
-	apps           map[string]*App
-	conns          map[string]*Client
-	numConnections int
-	numClients     int
+	mu    sync.RWMutex
+	apps  map[string]*App
+	conns map[string]*Client
 }
 
 // NewHub is a constructor method for the Hub struct
 func NewHub() *Hub {
 	return &Hub{
-		apps:           make(map[string]*App, 0),
-		numClients:     0,
-		numConnections: 0,
+		apps: make(map[string]*App),
 	}
 }
 
-// AddApp ...
 func (hub *Hub) AddApp(app *App) {
-	_, ok := hub.apps[app.Key]
+	hub.mu.Lock()
+	_, ok := hub.apps[app.Secret]
 	if !ok {
-		hub.apps[app.Key] = app
+		hub.apps[app.Secret] = app
 	}
+	hub.mu.Unlock()
 }
 
-// FindApp ...
-func (hub *Hub) FindApp(secret string) (*App, error) {
-	app, ok := hub.apps[secret]
-
-	if !ok {
-		return nil, errors.New("application is not found")
-	}
-
-	return app, nil
-}
-
-// BroadcastMessage ...
 func (hub *Hub) BroadcastMessage(appKey string, channelName string, pub *Publication) {
 
 	data, err := pub.Marshal()
@@ -162,7 +146,7 @@ func (h *Hub) shutdown(ctx context.Context) error {
 func (hub *Hub) Channels() []string {
 	channels := make([]string, 0)
 	for _, app := range hub.apps {
-		for ch, _ := range app.Channels {
+		for ch := range app.Channels {
 			channels = append(channels, ch)
 		}
 	}

@@ -1,10 +1,10 @@
-package main
+package core
 
 import (
 	"log"
 	"sync"
 
-	"github.com/sireax/emitted/internal/queue"
+	"github.com/sireax/core/internal/queue"
 )
 
 type writerConfig struct {

@@ -6,6 +6,7 @@ import (
 )
 
 const appsCollectionName = "apps"
+const statsCollecitonsName = "appstats"
 
 var (
 	mgoSession   *mgo.Session

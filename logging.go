@@ -1,4 +1,4 @@
-package main
+package core
 
 // LogLevel ...
 type LogLevel int
@@ -69,8 +69,6 @@ func NewLogEntry(level LogLevel, message string, fields ...map[string]interface{
 
 // LogHandler handles log entries - i.e. writes into correct destination if necessary.
 type LogHandler func(LogEntry)
-
-
 
 // logger can log entries.
 type logger struct {

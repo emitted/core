@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"hash/fnv"
@@ -9,10 +9,10 @@ import (
 func parseChId(id string) (string, string) {
 
 	arr := strings.Split(id, ":")
-	appKey := arr[0]
+	appSecret := arr[0]
 	channelName := arr[1]
 
-	return appKey, channelName
+	return appSecret, channelName
 }
 
 func makeChId(appKey string, chName string) string {
@@ -38,7 +38,7 @@ func getChannelType(ch string) string {
 	case strings.HasPrefix(ch, "presence"):
 		return "presence"
 	default:
-		return "regular"
+		return "public"
 	}
 }
 

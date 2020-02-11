@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"encoding/json"
@@ -85,7 +85,6 @@ func (t *websocketTransport) Write(data []byte) error {
 	}
 }
 
-// Close ...
 func (t *websocketTransport) Close(disconnect *Disconnect) error {
 	t.mu.Lock()
 	if t.closed {
@@ -151,9 +150,6 @@ func NewWebsocketHandler(c WebsocketConfig, n *Node) *WebsocketHandler {
 }
 
 func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-
-	//params := r.URL.Query()
-	//key := params.Get(":secret")
 
 	compression := s.config.Compression
 	compressionLevel := s.config.CompressionLevel
@@ -226,12 +222,10 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		ctxCh := make(chan struct{})
 		defer close(ctxCh)
 
-		client, err := NewClient(newCustomCancelContext(r.Context(), ctxCh), transport)
+		client, err := NewClient(s.node, newCustomCancelContext(r.Context(), ctxCh), transport)
 		if err != nil {
 			return
 		}
-
-		client.Connect(app)
 
 		defer func() {
 			client.Close(nil)
