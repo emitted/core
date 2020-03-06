@@ -2,7 +2,6 @@ package core
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -18,17 +17,19 @@ type websocketTransportOptions struct {
 type websocketTransport struct {
 	mu        sync.RWMutex
 	conn      *websocket.Conn
+	protocol  string
 	closed    bool
 	closeCh   chan struct{}
 	options   websocketTransportOptions
 	pingTimer *time.Timer
 }
 
-func newWebsocketTransport(conn *websocket.Conn, options websocketTransportOptions, closeCh chan struct{}) *websocketTransport {
+func newWebsocketTransport(conn *websocket.Conn, protocol string, options websocketTransportOptions, closeCh chan struct{}) *websocketTransport {
 	transport := &websocketTransport{
-		conn:    conn,
-		closeCh: closeCh,
-		options: options,
+		conn:     conn,
+		protocol: protocol,
+		closeCh:  closeCh,
+		options:  options,
 	}
 	if options.pingInterval > 0 {
 		transport.addPing()
@@ -151,6 +152,15 @@ func NewWebsocketHandler(c WebsocketConfig, n *Node) *WebsocketHandler {
 
 func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
+	secret := "secret123"
+
+	protocol := "6.0.0"
+
+	app, err := GetApp(s.node, secret)
+	if err != nil {
+		return
+	}
+
 	compression := s.config.Compression
 	compressionLevel := s.config.CompressionLevel
 
@@ -170,14 +180,14 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(rw, r, nil)
 	if err != nil {
-		log.Fatalln(err)
+		s.node.logger.log(NewLogEntry(LogLevelError, "error upgrading http connection", map[string]interface{}{"error": err.Error()}))
 		return
 	}
 
 	if compression {
 		err := conn.SetCompressionLevel(compressionLevel)
 		if err != nil {
-			log.Fatalln(err)
+			s.node.logger.log(NewLogEntry(LogLevelError, "error setting compression level", map[string]interface{}{"error": err.Error()}))
 		}
 	}
 
@@ -189,10 +199,10 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if writeTimeout == 0 {
 		writeTimeout = DefaultWebsocketWriteTimeout
 	}
-	//messageSizeLimit := s.config.MessageSizeLimit
-	//if messageSizeLimit == 0 {
-	messageSizeLimit := DefaultWebsocketMessageSizeLimit
-	//}
+	messageSizeLimit := s.config.MessageSizeLimit
+	if messageSizeLimit == 0 {
+		messageSizeLimit = DefaultWebsocketMessageSizeLimit
+	}
 
 	conn.SetReadLimit(int64(messageSizeLimit))
 	if pingInterval > 0 {
@@ -210,7 +220,7 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			writeTimeout: writeTimeout,
 		}
 		closeCh := make(chan struct{}, 1)
-		transport := newWebsocketTransport(conn, opts, closeCh)
+		transport := newWebsocketTransport(conn, protocol, opts, closeCh)
 
 		select {
 		case <-s.node.NotifyShutdown():
@@ -226,6 +236,8 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return
 		}
+
+		client.Connect(app)
 
 		defer func() {
 			client.Close(nil)

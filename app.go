@@ -15,6 +15,8 @@ type AppStats struct {
 	mu          sync.RWMutex
 	Connections int
 	Messages    int
+	Join        int
+	Leave       int
 }
 
 func (s *AppStats) getConns() int {
@@ -34,27 +36,33 @@ func (s *AppStats) getMsgs() int {
 }
 
 func (s *AppStats) IncrementConns() {
-	s.mu.RLock()
+	s.mu.Lock()
 	s.Connections++
-	s.mu.RUnlock()
+	s.mu.Unlock()
 }
 
 func (s *AppStats) DecrementConns() {
-	s.mu.RLock()
+	s.mu.Lock()
 	s.Connections--
-	s.mu.RUnlock()
+	s.mu.Unlock()
 }
 
 func (s *AppStats) IncrementMsgs() {
-	s.mu.RLock()
+	s.mu.Lock()
 	s.Messages++
-	s.mu.RUnlock()
+	s.mu.Unlock()
 }
 
-func (s *AppStats) DecrementMsgs() {
-	s.mu.RLock()
-	s.Messages--
-	s.mu.RUnlock()
+func (s *AppStats) IncrementJoin() {
+	s.mu.Lock()
+	s.Join++
+	s.mu.Unlock()
+}
+
+func (s *AppStats) IncrementLeave() {
+	s.mu.Lock()
+	s.Leave++
+	s.mu.Unlock()
 }
 
 type App struct {

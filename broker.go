@@ -3,7 +3,6 @@ package core
 import (
 	"errors"
 	"github.com/sireax/core/internal/timers"
-	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -209,7 +208,7 @@ func (s *shard) Run() error {
 		Dial: func() (redis.Conn, error) {
 			conn, err := redis.Dial("tcp", "localhost:6379")
 			if err != nil {
-				log.Fatalln("error while initializing redis pub/sub connection: ", err)
+				s.node.logger.log(NewLogEntry(LogLevelError, "error initializing redis connection", map[string]interface{}{"error": err.Error()}))
 			}
 
 			return conn, nil
@@ -239,7 +238,7 @@ func (s *shard) runPublishPipeline() {
 			conn := s.pool.Get()
 			err := conn.Send("PUBLISH", "pingchannel", nil)
 			if err != nil {
-				log.Fatal(err)
+				s.node.logger.log(NewLogEntry(LogLevelError, "error publishing to ping channel", map[string]interface{}{"error": err.Error()}))
 				conn.Close()
 				return
 			}
@@ -292,7 +291,7 @@ func (s *shard) runPubSub() {
 
 	err := psc.Subscribe("pingchannel")
 	if err != nil {
-		log.Fatalln("Something wrong with the ping channel: ", err)
+		s.node.logger.log(NewLogEntry(LogLevelError, "error subscribing to ping channel", map[string]interface{}{"error": err.Error()}))
 	}
 
 	done := make(chan struct{})
@@ -397,7 +396,7 @@ func (s *shard) runPubSub() {
 						var push Push
 						err := push.Unmarshal(message.Data)
 						if err != nil {
-							log.Fatal(err)
+							s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling push from msg broker", map[string]interface{}{"channel": message.Channel, "error": err.Error()}))
 						}
 
 						appKey, channelName := parseChId(message.Channel)
@@ -407,16 +406,16 @@ func (s *shard) runPubSub() {
 							var pub Publication
 							err := pub.Unmarshal(push.Data)
 							if err != nil {
-								continue
+								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling publication from msg broker", map[string]interface{}{"channel": message.Channel, "error": err.Error()}))
 							}
 
-							s.node.hub.BroadcastMessage(appKey, channelName, &pub)
+							s.node.hub.BroadcastPublication(appKey, channelName, &pub)
 
 						case PushTypeJoin:
 							var join Join
 							err := join.Unmarshal(push.Data)
 							if err != nil {
-								log.Fatal(err)
+								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling join from msg broker", map[string]interface{}{"channel": message.Channel, "error": err.Error()}))
 							}
 
 							s.node.hub.BroadcastJoin(appKey, &join)
@@ -424,7 +423,7 @@ func (s *shard) runPubSub() {
 							var leave Leave
 							err := leave.Unmarshal(push.Data)
 							if err != nil {
-								log.Fatal(err)
+								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling leave from msg broker", map[string]interface{}{"channel": message.Channel, "error": err.Error()}))
 							}
 
 							s.node.hub.BroadcastLeave(appKey, &leave)
@@ -581,7 +580,6 @@ func (s *shard) Publish(chId string, publication *Publication) error {
 }
 
 func (s *shard) PublishJoin(chId string, join *Join) error {
-	log.Println("publish handled")
 	eChan := make(chan error, 1)
 
 	bytes, err := join.Marshal()

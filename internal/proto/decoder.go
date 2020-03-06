@@ -150,7 +150,6 @@ func (d *ProtobufParamsDecoder) DecodeUnsubscribe(data []byte) (*UnsubscribeRequ
 // DecodePublish ...
 func (d *ProtobufParamsDecoder) DecodePublish(data []byte) (*PublishRequest, error) {
 	var p PublishRequest
-	log.Println(string(data))
 	err := p.Unmarshal(data)
 	if err != nil {
 		return nil, err

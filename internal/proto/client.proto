@@ -82,7 +82,6 @@ enum ClientType {
 }
 
 message ConnectRequest {
-    string app = 1;
     ClientType client = 2;
     string version = 3;
     bytes data = 4;

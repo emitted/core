@@ -19,6 +19,7 @@ type Node struct {
 	startedAt  int64
 	broker     *Broker
 	hub        *Hub
+	webhook    *webhookManager
 	config     Config
 	nodes      *nodeRegistry
 	shutdown   bool
@@ -77,12 +78,18 @@ func NewNode(c Config, brokerConfig *BrokerConfig) *Node {
 		subLocks: subLocks,
 	}
 
+	if c.LogHandler != nil {
+		n.logger = newLogger(c.LogLevel, c.LogHandler)
+	}
+
 	broker, err := NewBroker(n, brokerConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
 	n.broker = broker
-	n.hub = NewHub()
+
+	n.hub = NewHub(n)
+	n.webhook = NewWebhookManager(n, DefaultWebhookConfig)
 
 	return n
 }
@@ -90,6 +97,11 @@ func NewNode(c Config, brokerConfig *BrokerConfig) *Node {
 func (n *Node) Run() error {
 
 	err := n.broker.Run()
+	if err != nil {
+		return err
+	}
+
+	err = n.webhook.Run()
 	if err != nil {
 		return err
 	}
@@ -114,14 +126,14 @@ func (n *Node) updateMetrics() {
 }
 
 func (n *Node) Shutdown(ctx context.Context) error {
-	n.mu.Lock()
+	n.mu.RLock()
 	if n.shutdown {
 		n.mu.Unlock()
 		return nil
 	}
 	n.shutdown = true
 	close(n.shutdownCh)
-	n.mu.Unlock()
+	n.mu.RUnlock()
 
 	return n.hub.shutdown(ctx)
 }

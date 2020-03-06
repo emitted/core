@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package webhooks;
+
+enum Event {
+    CHANNEL_OCCUPIED = 0;
+    CHANNEL_VACATED = 1;
+    JOIN = 2;
+    LEAVE = 3;
+    PUBLICATION = 4;
+}
+
+message ChannelOccupied {
+    string channel = 1;
+}
+
+message ChannelVacated {
+    string channel = 1;
+}
+
+message PresenceAdded {
+    string channel = 1;
+    string uid = 2;
+    bytes info = 3;
+}
+
+message PresenceRemoved {
+    string channel = 1;
+    string uid = 2;
+    bytes info = 3;
+}
+
+message Publication {
+    string channel = 1;
+    string uid = 2;
+    bytes data = 3;
+}
+
+message Webhook {
+    uint32 id = 1;
+    string signature = 2;
+    Event event = 3;
+    string appId = 4;
+    string url = 5;
+    bytes data = 6;
+}

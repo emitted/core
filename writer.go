@@ -1,7 +1,6 @@
 package core
 
 import (
-	"log"
 	"sync"
 
 	"github.com/sireax/core/internal/queue"
@@ -29,7 +28,6 @@ func newWriter(config writerConfig) *writer {
 
 	go w.runWriteRoutine()
 
-	log.Println("Writer routine started")
 	return w
 }
 
@@ -42,7 +40,6 @@ func (w *writer) runWriteRoutine() {
 		msg, ok := w.messages.Wait()
 		if !ok {
 			if w.messages.Closed() || w.closed {
-				log.Println("Routine closed")
 				return
 			}
 			continue

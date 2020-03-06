@@ -11,6 +11,5 @@ type Channel struct {
 	mu      sync.Mutex
 	Clients map[string]*Client
 
-	infoMu sync.Mutex
-	Info   map[string]*ClientInfo
+	Info map[string]*ClientInfo
 }
