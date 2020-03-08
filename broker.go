@@ -280,10 +280,10 @@ func (s *shard) runPublishPipeline() {
 
 func (s *shard) runPubSub() {
 	conn := s.pool.Get()
-	if conn.Err() != nil {
-		conn.Close()
-		return
-	}
+	//if conn.Err() != nil {
+	//	conn.Close()
+	//	return
+	//}
 
 	psc := &redis.PubSubConn{
 		Conn: conn,
