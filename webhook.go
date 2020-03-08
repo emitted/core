@@ -17,8 +17,8 @@ type (
 const (
 	WebhookEventChannelOccupied = webhooks.Event_CHANNEL_OCCUPIED
 	WebhookEventChannelVacated  = webhooks.Event_CHANNEL_VACATED
-	WebhookEventJoin            = webhooks.Event_JOIN
-	WebhookEventLeave           = webhooks.Event_LEAVE
+	WebhookEventJoin            = webhooks.Event_PRESENCE_ADDED
+	WebhookEventLeave           = webhooks.Event_PRESENCE_REMOVED
 	WebhookEventPublication     = webhooks.Event_PUBLICATION
 )
 
@@ -120,9 +120,12 @@ func (w *webhookManager) runProducePipeline() {
 
 				if err != nil {
 					w.node.logger.log(NewLogEntry(LogLevelError, "error producing webhook", map[string]interface{}{"error": err.Error()}))
+					whpr[i].done(err)
+					continue
 				}
 
 				w.node.logger.log(NewLogEntry(LogLevelInfo, "just produced webhook ;)"))
+
 				whpr[i].done(nil)
 			}
 			whpr = nil

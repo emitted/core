@@ -2,6 +2,19 @@ package database
 
 import "github.com/pkg/errors"
 
+type Options struct {
+	JoinLeave bool      `bson:"join_leave"`
+	Webhooks  []Webhook `bson:"webhooks"`
+}
+
+type Webhook struct {
+	Url string `bson:"url"`
+
+	Channel     bool `bson:"channel"`
+	Presence    bool `bson:"presence"`
+	Publication bool `bson:"publication"`
+}
+
 type App struct {
 	Id     string `bson:"_id"`
 	Key    string `bson:"key"`
@@ -10,9 +23,7 @@ type App struct {
 	MaxConnections int `bson:"max_connections"`
 	MaxMessages    int `bson:"max_messages"`
 
-	Options struct {
-		JoinLeave bool `bson:"join_leave"`
-	} `bson:"options"`
+	Options Options `bson:"options"`
 }
 
 func (app *App) Validate() error {

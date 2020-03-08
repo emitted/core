@@ -2,11 +2,13 @@ syntax = "proto3";
 
 package webhooks;
 
+//import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
 enum Event {
     CHANNEL_OCCUPIED = 0;
     CHANNEL_VACATED = 1;
-    JOIN = 2;
-    LEAVE = 3;
+    PRESENCE_ADDED = 2;
+    PRESENCE_REMOVED = 3;
     PUBLICATION = 4;
 }
 

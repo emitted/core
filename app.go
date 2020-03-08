@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-type AppOptions struct {
-	JoinLeave bool
-}
-
 type AppStats struct {
 	mu          sync.RWMutex
 	Connections int
@@ -79,7 +75,7 @@ type App struct {
 
 	Clients  map[string]*Client
 	Channels map[string]*Channel
-	Options  AppOptions
+	Options  database.Options
 
 	statsMu sync.Mutex
 
@@ -119,9 +115,7 @@ func NewApp(n *Node, dbApp database.App) *App {
 		Clients:  make(map[string]*Client),
 		Channels: make(map[string]*Channel),
 
-		Options: AppOptions{
-			JoinLeave: dbApp.Options.JoinLeave,
-		},
+		Options: dbApp.Options,
 		Stats: AppStats{
 			Connections: 0,
 			Messages:    0,
