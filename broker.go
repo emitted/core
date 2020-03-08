@@ -287,10 +287,10 @@ func (s *shard) runPubSub() {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error connecting to redis: "))
 		return
 	}
-	if conn.Err() != nil {
-		conn.Close()
-		return
-	}
+	//if conn.Err() != nil {
+	//	conn.Close()
+	//	return
+	//}
 
 	psc := &redis.PubSubConn{
 		Conn: conn,
