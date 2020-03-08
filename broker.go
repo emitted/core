@@ -216,6 +216,8 @@ func (s *shard) Run() error {
 		},
 	}
 
+	s.node.logger.log(NewLogEntry(LogLevelInfo, "pool: ", map[string]interface{}{"pool": s.pool}))
+
 	go runForever(func() {
 		s.runPublishPipeline()
 	})
