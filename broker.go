@@ -207,7 +207,7 @@ func (s *shard) Run() error {
 		MaxActive: 12000, // max number of connections
 		Wait:      true,
 		Dial: func() (redis.Conn, error) {
-			conn, err := redis.Dial("tcp", "127.0.0.1:6379")
+			conn, err := redis.Dial("tcp", "localhost:6379")
 			if err != nil {
 				s.node.logger.log(NewLogEntry(LogLevelError, "error initializing redis connection", map[string]interface{}{"error": err.Error()}))
 			}
@@ -281,6 +281,10 @@ func (s *shard) runPublishPipeline() {
 
 func (s *shard) runPubSub() {
 	conn := s.pool.Get()
+	if conn == nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error connecting to redis: "))
+		return
+	}
 	if conn.Err() != nil {
 		conn.Close()
 		return
