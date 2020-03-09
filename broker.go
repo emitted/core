@@ -145,7 +145,7 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 				redis.DialWriteTimeout(writeTimeout),
 			}
 			n.logger.log(NewLogEntry(LogLevelInfo, "trying to connect to redis on: "+serverAddr))
-			c, err := redis.Dial("tcp", serverAddr, opts...)
+			c, err := redis.Dial("tcp", "redis.default.svc.cluster.local:6379", opts...)
 			if err != nil {
 				return nil, err
 			}
@@ -207,7 +207,7 @@ func (s *shard) Run() error {
 		MaxActive: 12000, // max number of connections
 		Wait:      true,
 		Dial: func() (redis.Conn, error) {
-			conn, err := redis.Dial("tcp", "localhost:6379")
+			conn, err := redis.Dial("tcp", "redis.default.svc.cluster.local:6379")
 			if err != nil {
 				s.node.logger.log(NewLogEntry(LogLevelError, "error initializing redis connection", map[string]interface{}{"error": err.Error()}))
 			}
