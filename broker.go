@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"github.com/sireax/core/internal/timers"
+	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -113,6 +114,7 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 	db := conf.DB
 
 	serverAddr := net.JoinHostPort(host, strconv.Itoa(port))
+	log.Println("server addr:" + serverAddr)
 
 	poolSize := defaultPoolSize
 
@@ -144,8 +146,7 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 				redis.DialReadTimeout(readTimeout),
 				redis.DialWriteTimeout(writeTimeout),
 			}
-			n.logger.log(NewLogEntry(LogLevelInfo, "trying to connect to redis on: "+serverAddr))
-			c, err := redis.Dial("tcp", "redis-master:6379", opts...)
+			c, err := redis.Dial("tcp", serverAddr, opts...)
 			if err != nil {
 				return nil, err
 			}
@@ -201,20 +202,6 @@ func (b *Broker) getShard(channel string) *shard {
 }
 
 func (s *shard) Run() error {
-
-	s.pool = &redis.Pool{
-		MaxIdle:   80,
-		MaxActive: 12000, // max number of connections
-		Wait:      true,
-		Dial: func() (redis.Conn, error) {
-			conn, err := redis.Dial("tcp", "redis-master:6379")
-			if err != nil {
-				s.node.logger.log(NewLogEntry(LogLevelError, "error initializing redis connection", map[string]interface{}{"error": err.Error()}))
-			}
-
-			return conn, nil
-		},
-	}
 
 	s.node.logger.log(NewLogEntry(LogLevelInfo, "pool: ", map[string]interface{}{"pool": s.pool}))
 
@@ -287,10 +274,10 @@ func (s *shard) runPubSub() {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error connecting to redis: "))
 		return
 	}
-	//if conn.Err() != nil {
-	//	conn.Close()
-	//	return
-	//}
+	if conn.Err() != nil {
+		conn.Close()
+		return
+	}
 
 	psc := &redis.PubSubConn{
 		Conn: conn,
