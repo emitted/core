@@ -3,7 +3,7 @@ package core
 import "sync"
 
 // Channel structure represents an instance
-// of the channel, that client is connected to.
+// of the channel, that clientproto is connected to.
 type Channel struct {
 	App  *App
 	Name string

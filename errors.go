@@ -24,7 +24,7 @@ var (
 		Code:    104,
 		Message: "method not found",
 	}
-	// ErrorAlreadySubscribed returned when client wants to subscribe on channel
+	// ErrorAlreadySubscribed returned when clientproto wants to subscribe on channel
 	// it already subscribed to.
 	ErrorAlreadySubscribed = &Error{
 		Code:    105,
@@ -33,7 +33,7 @@ var (
 
 	ErrorChannelNotFound = &Error{
 		Code:    106,
-		Message: "client is not subscribed to the channel",
+		Message: "clientproto is not subscribed to the channel",
 	}
 	// ErrorLimitExceeded says that some sort of limit exceeded, server logs should
 	// give more detailed information.

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"github.com/sireax/core/internal/proto/webhooks"
 	"log"
 	"sync"
 )
@@ -63,14 +64,16 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *Publi
 
 	app.Stats.IncrementMsgs()
 
-	wh := newPublicationWebhook(app.ID, "signature", "google.com", pub.Data)
-	whData, err := wh.Marshal()
-	r := webhookRequest{
-		data: whData,
-		err:  make(chan error, 1),
-	}
+	//////////////
+	// webhooks //
 
-	h.node.webhook.Enqueue(r)
+	//clientInfo, _ := pub.Info.Marshal()
+	//
+	//pubWh := webhooks.Publication{
+	//	Channel: channelName,
+	//	Uid:     pub.,
+	//	Data:    nil,
+	//}
 
 }
 
@@ -112,6 +115,41 @@ func (h *Hub) BroadcastJoin(appKey string, join *Join) {
 	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting join", map[string]interface{}{"app": appKey, "channel": join.Channel}))
 
 	app.Stats.IncrementJoin()
+
+	//////////////
+	// webhooks //
+
+	clientInfo, _ := join.Data.Marshal()
+	joinWh := webhooks.PresenceAdded{
+		Channel: join.Channel,
+		Uid:     join.Uid,
+		Info:    clientInfo,
+	}
+	joinWhData, _ := joinWh.Marshal()
+
+	for _, webhook := range app.Options.Webhooks {
+
+		if !webhook.Presence {
+			continue
+		}
+
+		wh := webhooks.Webhook{
+			Id:        0,
+			Signature: "",
+			Event:     webhooks.Event_PRESENCE_ADDED,
+			AppId:     app.ID,
+			Url:       webhook.Url,
+			Data:      joinWhData,
+		}
+
+		whData, _ := wh.Marshal()
+
+		h.node.webhook.Enqueue(webhookRequest{
+			err:  make(chan error, 1),
+			data: whData,
+		})
+
+	}
 }
 
 func (h *Hub) BroadcastLeave(appKey string, leave *Leave) {
@@ -152,6 +190,43 @@ func (h *Hub) BroadcastLeave(appKey string, leave *Leave) {
 	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting leave", map[string]interface{}{"app": appKey, "channel": leave.Channel}))
 
 	app.Stats.IncrementLeave()
+
+	//////////////
+	// webhooks //
+
+	clientInfo, _ := leave.Data.Marshal()
+	leaveWh := webhooks.PresenceRemoved{
+		Channel: leave.Channel,
+		Uid:     leave.Uid,
+		Info:    clientInfo,
+	}
+
+	leaveWhData, _ := leaveWh.Marshal()
+	for _, webhook := range app.Options.Webhooks {
+
+		if !webhook.Presence {
+			continue
+		}
+
+		wh := webhooks.Webhook{
+			Id:        0,
+			Signature: "",
+			Event:     webhooks.Event_PRESENCE_REMOVED,
+			AppId:     app.ID,
+			Url:       webhook.Url,
+			Data:      leaveWhData,
+		}
+
+		whData, _ := wh.Marshal()
+
+		whR := webhookRequest{
+			err:  make(chan error, 1),
+			data: whData,
+		}
+
+		h.node.webhook.Enqueue(whR)
+	}
+
 }
 
 func (h *Hub) shutdown(ctx context.Context) error {

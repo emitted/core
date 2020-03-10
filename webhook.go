@@ -5,8 +5,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/snappy"
+	"github.com/sireax/core/internal/proto/webhooks"
 	"github.com/sireax/core/internal/timers"
-	"github.com/sireax/core/internal/webhooks"
 	"time"
 )
 

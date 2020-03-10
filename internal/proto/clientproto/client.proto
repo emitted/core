@@ -19,7 +19,6 @@ message Command {
 message Error {
     uint32 code = 1;
     string message = 2;
-
 }
 
 message Reply {
@@ -47,19 +46,21 @@ message ClientInfo {
 }
 
 message Publication {
-    bytes data = 1;
-    ClientInfo info = 2;
+    string channel = 1;
+    bytes data = 3;
+    ClientInfo info = 4;
 }
 
 message Join {
     string channel = 1;
-    ClientInfo data = 2;
+    ClientInfo data = 3;
 }
 
 message Leave {
     string channel = 1;
-    ClientInfo info = 2;
+    ClientInfo data = 3;
 }
+
 
 message SubscribeRequest {
     string channel = 1;

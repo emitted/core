@@ -1,47 +1,49 @@
 package core
 
-import "github.com/sireax/core/internal/proto"
+import (
+	"github.com/sireax/core/internal/proto/clientproto"
+)
 
 type (
-	Raw = protocol.Raw
+	Raw = clientproto.Raw
 
-	Error       = protocol.Error
-	Publication = protocol.Publication
-	Join        = protocol.Join
-	Leave       = protocol.Leave
-	Push        = protocol.Push
+	Error       = clientproto.Error
+	Publication = clientproto.Publication
+	Join        = clientproto.Join
+	Leave       = clientproto.Leave
+	Push        = clientproto.Push
 
-	Command = protocol.Command
-	Reply   = protocol.Reply
+	Command = clientproto.Command
+	Reply   = clientproto.Reply
 
-	PublishRequest     = protocol.PublishRequest
-	SubscribeRequest   = protocol.SubscribeRequest
-	UnsubscribeRequest = protocol.UnsubscribeRequest
-	PresenceRequest    = protocol.PresenceRequest
-	ConnectRequest     = protocol.ConnectRequest
+	PublishRequest     = clientproto.PublishRequest
+	SubscribeRequest   = clientproto.SubscribeRequest
+	UnsubscribeRequest = clientproto.UnsubscribeRequest
+	PresenceRequest    = clientproto.PresenceRequest
+	ConnectRequest     = clientproto.ConnectRequest
 
-	ClientInfo = protocol.ClientInfo
+	ClientInfo = clientproto.ClientInfo
 
-	SubscribeResult   = protocol.SubscribeResult
-	UnsubscribeResult = protocol.UnsubscribeResult
-	PublishResult     = protocol.PublishResult
-	PresenceResult    = protocol.PresenceResult
-	ConnectResult     = protocol.ConnectResult
-	PingResult        = protocol.PingResult
+	SubscribeResult   = clientproto.SubscribeResult
+	UnsubscribeResult = clientproto.UnsubscribeResult
+	PublishResult     = clientproto.PublishResult
+	PresenceResult    = clientproto.PresenceResult
+	ConnectResult     = clientproto.ConnectResult
+	PingResult        = clientproto.PingResult
 )
 
 const (
-	PushTypePublication = protocol.PushType_PUBLICATION
-	PushTypeJoin        = protocol.PushType_JOIN
-	PushTypeLeave       = protocol.PushType_LEAVE
+	PushTypePublication = clientproto.PushType_PUBLICATION
+	PushTypeJoin        = clientproto.PushType_JOIN
+	PushTypeLeave       = clientproto.PushType_LEAVE
 
-	ClientTypeJs    = protocol.ClientType_JS
-	ClientTypeSwift = protocol.ClientType_SWIFT
+	ClientTypeJs    = clientproto.ClientType_JS
+	ClientTypeSwift = clientproto.ClientType_SWIFT
 
-	MethodTypeConnect     = protocol.MethodType_CONNECT
-	MethodTypePublish     = protocol.MethodType_PUBLISH
-	MethodTypeSubscribe   = protocol.MethodType_SUBSCRIBE
-	MethodTypeUnsubscribe = protocol.MethodType_UNSUBSCRIBE
-	MethodTypePresence    = protocol.MethodType_PRESENCE
-	MethodTypePing        = protocol.MethodType_PING
+	MethodTypeConnect     = clientproto.MethodType_CONNECT
+	MethodTypePublish     = clientproto.MethodType_PUBLISH
+	MethodTypeSubscribe   = clientproto.MethodType_SUBSCRIBE
+	MethodTypeUnsubscribe = clientproto.MethodType_UNSUBSCRIBE
+	MethodTypePresence    = clientproto.MethodType_PRESENCE
+	MethodTypePing        = clientproto.MethodType_PING
 )

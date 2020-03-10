@@ -1,4 +1,4 @@
-package sysproto
+package nodeproto
 
 import (
 	"bytes"

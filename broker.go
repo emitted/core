@@ -520,7 +520,7 @@ func (s *shard) handleUnsubscribe(chId string, r *UnsubscribeRequest, info *Clie
 	}
 
 	if info != nil {
-		leave.Info = info
+		leave.Data = info
 	}
 
 	return s.PublishLeave(chId, leave)

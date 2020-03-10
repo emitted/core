@@ -1,4 +1,4 @@
-package sysproto
+package nodeproto
 
 // Decoder ...
 type Decoder interface {

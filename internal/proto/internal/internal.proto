@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package internal;
+
+enum PacketType {
+    PUBLICATION = 0;
+    JOIN = 1;
+    LEAVE = 2;
+}
+
+message Packet {
+    PacketType type = 1;
+    bytes data = 2;
+}
+
+message Publication {
+    string channel = 1;
+    string uid = 2;
+    bytes data = 3;
+    bytes clientInfo = 4;
+}
+
+message Join {
+    string channel = 1;
+    string uid = 2;
+    bytes clientInfo = 3;
+}
+
+message Leave {
+    string channel = 1;
+    string uid = 2;
+    bytes clientInfo = 3;
+}
+

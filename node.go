@@ -5,7 +5,7 @@ import (
 	"github.com/FZambia/eagle"
 	"github.com/centrifugal/centrifuge"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sireax/core/internal/sysproto"
+	"github.com/sireax/core/internal/proto/nodeproto"
 	"github.com/sireax/core/internal/uuid"
 	"log"
 	"sync"
@@ -27,8 +27,8 @@ type Node struct {
 	logger     *logger
 	subLocks   map[int]*sync.Mutex
 
-	sysEncoder sysproto.Encoder
-	sysDecoder sysproto.Decoder
+	protoEncoder nodeproto.Encoder
+	protoDecoder nodeproto.Decoder
 
 	metricsMu       sync.Mutex
 	metricsExporter *eagle.Eagle
@@ -63,14 +63,14 @@ func NewNode(c Config, brokerConfig *BrokerConfig) *Node {
 	}
 
 	n := &Node{
-		uid:        uid,
-		nodes:      newNodeRegistry(uid),
-		config:     c,
-		startedAt:  time.Now().Unix(),
-		shutdownCh: make(chan struct{}),
-		logger:     nil,
-		sysEncoder: sysproto.NewProtobufEncoder(),
-		sysDecoder: sysproto.NewProtobufDecoder(),
+		uid:          uid,
+		nodes:        newNodeRegistry(uid),
+		config:       c,
+		startedAt:    time.Now().Unix(),
+		shutdownCh:   make(chan struct{}),
+		logger:       nil,
+		protoEncoder: nodeproto.NewProtobufEncoder(),
+		protoDecoder: nodeproto.NewProtobufDecoder(),
 		metrics: &NodeMetrics{
 			clients:  0,
 			channels: 0,
@@ -174,7 +174,7 @@ func (n *Node) pubNode() error {
 
 	n.mu.RLock()
 
-	node := &sysproto.Node{
+	node := &nodeproto.Node{
 		UID:     n.uid,
 		Name:    n.config.Name,
 		Version: n.config.Version,
@@ -193,11 +193,11 @@ func (n *Node) pubNode() error {
 
 	n.mu.RUnlock()
 
-	params, _ := n.sysEncoder.EncodeNode(node)
+	params, _ := n.protoEncoder.EncodeNode(node)
 
-	cmd := &sysproto.Command{
+	cmd := &nodeproto.Command{
 		UID:    n.uid,
-		Method: sysproto.MethodTypeNode,
+		Method: nodeproto.MethodTypeNode,
 		Params: params,
 	}
 
@@ -211,14 +211,14 @@ func (n *Node) pubNode() error {
 	return nil
 }
 
-func (n *Node) nodeCmd(node *sysproto.Node) error {
+func (n *Node) nodeCmd(node *nodeproto.Node) error {
 	n.nodes.add(node)
 	return nil
 }
 
-func (n *Node) publishNode(cmd *sysproto.Command) error {
+func (n *Node) publishNode(cmd *nodeproto.Command) error {
 	//messagesSentCountControl.Inc()
-	_, err := n.sysEncoder.EncodeCommand(cmd)
+	_, err := n.protoEncoder.EncodeCommand(cmd)
 	if err != nil {
 		return err
 	}
@@ -226,8 +226,8 @@ func (n *Node) publishNode(cmd *sysproto.Command) error {
 	return nil
 }
 
-func (n *Node) getMetrics(metrics eagle.Metrics) *sysproto.Metrics {
-	return &sysproto.Metrics{
+func (n *Node) getMetrics(metrics eagle.Metrics) *nodeproto.Metrics {
+	return &nodeproto.Metrics{
 		Interval: n.config.NodeInfoMetricsAggregateInterval.Seconds(),
 		Items:    metrics.Flatten("."),
 	}
@@ -236,21 +236,21 @@ func (n *Node) getMetrics(metrics eagle.Metrics) *sysproto.Metrics {
 type nodeRegistry struct {
 	mu         sync.RWMutex
 	currentUID string
-	nodes      map[string]sysproto.Node
+	nodes      map[string]nodeproto.Node
 	updates    map[string]int64
 }
 
 func newNodeRegistry(currentUID string) *nodeRegistry {
 	return &nodeRegistry{
 		currentUID: currentUID,
-		nodes:      make(map[string]sysproto.Node),
+		nodes:      make(map[string]nodeproto.Node),
 		updates:    make(map[string]int64),
 	}
 }
 
-func (r *nodeRegistry) list() []sysproto.Node {
+func (r *nodeRegistry) list() []nodeproto.Node {
 	r.mu.RLock()
-	nodes := make([]sysproto.Node, len(r.nodes))
+	nodes := make([]nodeproto.Node, len(r.nodes))
 	i := 0
 	for _, info := range r.nodes {
 		nodes[i] = info
@@ -260,14 +260,14 @@ func (r *nodeRegistry) list() []sysproto.Node {
 	return nodes
 }
 
-func (r *nodeRegistry) get(uid string) sysproto.Node {
+func (r *nodeRegistry) get(uid string) nodeproto.Node {
 	r.mu.RLock()
 	info := r.nodes[uid]
 	r.mu.RUnlock()
 	return info
 }
 
-func (r *nodeRegistry) add(info *sysproto.Node) {
+func (r *nodeRegistry) add(info *nodeproto.Node) {
 	r.mu.Lock()
 	if node, ok := r.nodes[info.UID]; ok {
 		if info.Metrics != nil {
@@ -289,7 +289,7 @@ func (r *nodeRegistry) clean(delay time.Duration) {
 	r.mu.Lock()
 	for uid := range r.nodes {
 		if uid == r.currentUID {
-			// No need to clean info for current node.
+			// No need to clean info for current nodeproto.
 			continue
 		}
 		updated, ok := r.updates[uid]
@@ -299,7 +299,7 @@ func (r *nodeRegistry) clean(delay time.Duration) {
 			continue
 		}
 		if time.Now().Unix()-updated > int64(delay.Seconds()) {
-			// Too many seconds since this node have been last seen - remove it from map.
+			// Too many seconds since this nodeproto have been last seen - remove it from map.
 			delete(r.nodes, uid)
 			delete(r.updates, uid)
 		}

@@ -4,7 +4,7 @@ import (
 	// "encoding/json"
 
 	"context"
-	"github.com/sireax/core/internal/proto"
+	"github.com/sireax/core/internal/proto/clientproto"
 	"github.com/sireax/core/internal/uuid"
 	"sync"
 	"time"
@@ -57,7 +57,7 @@ func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, er
 			err := client.transport.Write(data)
 			if err != nil {
 				client.Close(DisconnectWriteError)
-				client.node.logger.log(NewLogEntry(LogLevelError, "error writing to client", map[string]interface{}{"client": client.uid, "error": err.Error()}))
+				client.node.logger.log(NewLogEntry(LogLevelError, "error writing to clientproto", map[string]interface{}{"clientproto": client.uid, "error": err.Error()}))
 			}
 			return nil
 		},
@@ -66,14 +66,14 @@ func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, er
 				err := client.transport.Write(payload)
 				if err != nil {
 					client.Close(DisconnectWriteError)
-					client.node.logger.log(NewLogEntry(LogLevelError, "error writing to client", map[string]interface{}{"client": client.uid, "error": err.Error()}))
+					client.node.logger.log(NewLogEntry(LogLevelError, "error writing to clientproto", map[string]interface{}{"clientproto": client.uid, "error": err.Error()}))
 				}
 			}
 			return nil
 		},
 	}
 
-	// Setting client's message writer
+	// Setting clientproto's message writer
 	client.messageWriter = newWriter(messageWriterConf)
 
 	if !client.authenticated {
@@ -106,7 +106,7 @@ func (c *Client) CloseUnauthenticated() {
 	c.mu.RUnlock()
 
 	if !auth {
-		c.node.logger.log(NewLogEntry(LogLevelDebug, "closing unauthenticated client", map[string]interface{}{"client": c.uid}))
+		c.node.logger.log(NewLogEntry(LogLevelDebug, "closing unauthenticated clientproto", map[string]interface{}{"clientproto": c.uid}))
 		c.Close(DisconnectStale)
 	}
 
@@ -137,7 +137,7 @@ func (c *Client) Disconnect() {
 		delete(c.node.hub.apps, c.app.Key)
 	}
 
-	c.node.logger.log(NewLogEntry(LogLevelDebug, "client has disconnected from app", map[string]interface{}{"client": c.uid, "app": c.app.ID}))
+	c.node.logger.log(NewLogEntry(LogLevelDebug, "clientproto has disconnected from app", map[string]interface{}{"clientproto": c.uid, "app": c.app.ID}))
 
 }
 
@@ -156,7 +156,7 @@ func (c *Client) Subscribe(ch string) {
 		c.mu.Unlock()
 	}
 
-	c.node.logger.log(NewLogEntry(LogLevelDebug, "client subscribed to channel", map[string]interface{}{"client": c.uid, "app": c.app.ID, "channel": ch}))
+	c.node.logger.log(NewLogEntry(LogLevelDebug, "clientproto subscribed to channel", map[string]interface{}{"clientproto": c.uid, "app": c.app.ID, "channel": ch}))
 
 }
 
@@ -171,7 +171,7 @@ func (c *Client) Unsubscribe(ch string) {
 		c.mu.Unlock()
 	}
 
-	c.node.logger.log(NewLogEntry(LogLevelDebug, "client unsubscribed from channel", map[string]interface{}{"client": c.uid, "app": c.app.ID, "channel": ch}))
+	c.node.logger.log(NewLogEntry(LogLevelDebug, "clientproto unsubscribed from channel", map[string]interface{}{"clientproto": c.uid, "app": c.app.ID, "channel": ch}))
 }
 
 func (c *Client) unsubscribeForce(ch string) {
@@ -260,19 +260,19 @@ func (c *Client) Close(disconnect *Disconnect) {
 	}
 
 	if disconnect != nil && disconnect.Reason != "" {
-		c.node.logger.log(NewLogEntry(LogLevelDebug, "closing client connection", map[string]interface{}{"client": c.uid, "reason": disconnect.Reason}))
+		c.node.logger.log(NewLogEntry(LogLevelDebug, "closing clientproto connection", map[string]interface{}{"clientproto": c.uid, "reason": disconnect.Reason}))
 	} else {
-		c.node.logger.log(NewLogEntry(LogLevelDebug, "client closed connection"))
+		c.node.logger.log(NewLogEntry(LogLevelDebug, "clientproto closed connection"))
 	}
 
 	err := c.messageWriter.close()
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelError, "error closing message writer", map[string]interface{}{"client": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelError, "error closing message writer", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
 	}
 
 	err = c.transport.Close(disconnect)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelError, "error closing transport", map[string]interface{}{"client": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelError, "error closing transport", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
 	}
 }
 
@@ -294,15 +294,15 @@ func (c *Client) Handle(data []byte) {
 	c.mu.Unlock()
 
 	if len(data) == 0 {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "empty client request recieved", map[string]interface{}{"client": c.uid}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "empty clientproto request recieved", map[string]interface{}{"clientproto": c.uid}))
 		c.Close(DisconnectBadRequest)
 		return
 	}
 
-	decoder := protocol.NewProtobufCommandDecoder(data)
+	decoder := clientproto.NewProtobufCommandDecoder(data)
 	cmd, err := decoder.Decode()
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "empty client request recieved", map[string]interface{}{"client": c.uid}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "empty clientproto request recieved", map[string]interface{}{"clientproto": c.uid}))
 	}
 
 	disconnect := c.HandleCommand(cmd)
@@ -324,7 +324,7 @@ func (c *Client) Handle(data []byte) {
 }
 
 type replyWriter struct {
-	write func(*protocol.Reply) error
+	write func(*clientproto.Reply) error
 }
 
 func (c *Client) HandleCommand(cmd *Command) *Disconnect {
@@ -338,11 +338,11 @@ func (c *Client) HandleCommand(cmd *Command) *Disconnect {
 
 	var disconnect *Disconnect
 
-	write := func(rep *protocol.Reply) error {
+	write := func(rep *clientproto.Reply) error {
 		rep.Id = 6346
 		data, err := rep.Marshal()
 		if err != nil {
-			c.node.logger.log(NewLogEntry(LogLevelError, "error marshaling reply", map[string]interface{}{"client": c.uid, "error": err.Error()}))
+			c.node.logger.log(NewLogEntry(LogLevelError, "error marshaling reply", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
 			return err
 		}
 
@@ -397,14 +397,14 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 
 	var disconnect *Disconnect
 
-	p, err := protocol.NewProtobufParamsDecoder().DecodeConnect(data)
+	p, err := clientproto.NewProtobufParamsDecoder().DecodeConnect(data)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling connection command", map[string]interface{}{"client": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling connection command", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
 		return DisconnectBadRequest
 	}
 
 	if p.Version == "" {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "empty version provided in connection command", map[string]interface{}{"client": c.uid}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "empty version provided in connection command", map[string]interface{}{"clientproto": c.uid}))
 		return DisconnectBadRequest
 	}
 
@@ -426,7 +426,7 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 	c.expireTimer = time.AfterFunc(time.Hour, c.Expire)
 	c.mu.RUnlock()
 
-	c.node.logger.log(NewLogEntry(LogLevelDebug, "a client connected", map[string]interface{}{"uid": c.uid, "app": c.app.ID, "client": c.client, "version": c.version}))
+	c.node.logger.log(NewLogEntry(LogLevelDebug, "a clientproto connected", map[string]interface{}{"uid": c.uid, "app": c.app.ID, "clientproto": c.client, "version": c.version}))
 
 	expires := time.Now().Add(time.Hour).Unix()
 
@@ -464,9 +464,9 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	var disconnect *Disconnect
 
-	p, err := protocol.NewProtobufParamsDecoder().DecodeSubscribe(data)
+	p, err := clientproto.NewProtobufParamsDecoder().DecodeSubscribe(data)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling subscribe command", map[string]interface{}{"client": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling subscribe command", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
 		err := rw.write(&Reply{
 			Error: ErrorBadRequest,
 		})
@@ -557,7 +557,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	if first {
 		err := c.node.broker.Subscribe(chId)
 		if err != nil {
-			c.node.logger.log(NewLogEntry(LogLevelError, "error subscribing broker to channel", map[string]interface{}{"channelID": chId, "client": c.uid, "error": err.Error()}))
+			c.node.logger.log(NewLogEntry(LogLevelError, "error subscribing broker to channel", map[string]interface{}{"channelID": chId, "clientproto": c.uid, "error": err.Error()}))
 		}
 	}
 
@@ -601,9 +601,9 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	var disconnect *Disconnect
 
-	p, err := protocol.NewProtobufParamsDecoder().DecodeUnsubscribe(data)
+	p, err := clientproto.NewProtobufParamsDecoder().DecodeUnsubscribe(data)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling unsubscribe command", map[string]interface{}{"client": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling unsubscribe command", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
 		return DisconnectBadRequest
 	}
 
@@ -679,9 +679,9 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 
 	var disconnect *Disconnect
 
-	p, err := protocol.NewProtobufParamsDecoder().DecodePublish(data)
+	p, err := clientproto.NewProtobufParamsDecoder().DecodePublish(data)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling publish command", map[string]interface{}{"client": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling publish command", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
 		return DisconnectBadRequest
 	}
 
@@ -701,7 +701,7 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 	chId := makeChId(c.app.Secret, p.Channel)
 	err = c.node.broker.Publish(chId, cInfo, p)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling publication", map[string]interface{}{"channelID": chId, "client": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling publication", map[string]interface{}{"channelID": chId, "clientproto": c.uid, "error": err.Error()}))
 	}
 
 	res := &PublishResult{}
@@ -735,7 +735,7 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 
 	var disconnect *Disconnect
 
-	p, err := protocol.NewProtobufParamsDecoder().DecodePresence(data)
+	p, err := clientproto.NewProtobufParamsDecoder().DecodePresence(data)
 	if err != nil {
 		return DisconnectBadRequest
 	}
@@ -800,7 +800,7 @@ func (c *Client) handlePing(data []byte, rw *replyWriter) *Disconnect {
 
 	var disconnect *Disconnect
 
-	_, err := protocol.NewProtobufParamsDecoder().DecodePing(data)
+	_, err := clientproto.NewProtobufParamsDecoder().DecodePing(data)
 	if err != nil {
 		return DisconnectBadRequest
 	}

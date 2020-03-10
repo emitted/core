@@ -14,4 +14,4 @@ EXPOSE 8000
 
 RUN chmod u+x main
 
-RUN ["./main"]
+ENTRYPOINT ["./main"]

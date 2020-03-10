@@ -1,4 +1,4 @@
-package sysproto
+package nodeproto
 
 type Encoder interface {
 	EncodeCommand(*Command) ([]byte, error)
