@@ -1,10 +1,10 @@
 package core
 
 import (
-	//"github.com/pkg/errors"
 	"github.com/Shopify/sarama"
+	"github.com/pkg/errors"
 	"github.com/sireax/core/internal/proto/webhooks"
-	//"github.com/sireax/core/internal/timers"
+	"github.com/sireax/core/internal/timers"
 	"time"
 )
 
@@ -56,24 +56,12 @@ func NewWebhookManager(node *Node, config webhookConfig) *webhookManager {
 
 func (w *webhookManager) Run() error {
 
-	//dialer := &kafka.Dialer{
-	//	Timeout:  10 * time.Second,
-	//	ClientID: w.node.uid,
-	//}
-
-	//config := kafka.WriterConfig{
-	//	Brokers:          []string{w.config.address},
-	//	Topic:            w.config.topic,
-	//	Balancer:         &kafka.LeastBytes{},
-	//	Dialer:           dialer,
-	//	WriteTimeout:     10 * time.Second,
-	//	ReadTimeout:      10 * time.Second,
-	//	CompressionCodec: snappy.NewCompressionCodec(),
-	//}
-
 	config := sarama.NewConfig()
+	config.Producer.Compression = sarama.CompressionSnappy
+	config.Producer.Timeout = time.Second * 5
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
+
 	producer, err := sarama.NewAsyncProducer([]string{"localhost:9092"}, config)
 	if err != nil {
 		w.node.logger.log(NewLogEntry(LogLevelError, "error setting up kafka", map[string]interface{}{"error": err.Error()}))
@@ -91,9 +79,6 @@ func (w *webhookManager) Run() error {
 }
 
 func (w *webhookManager) runProducePipeline() {
-
-	//pingTicker := time.NewTicker(time.Second)
-	//defer pingTicker.Stop()
 
 	select {
 	case <-w.node.NotifyShutdown():
@@ -115,7 +100,6 @@ func (w *webhookManager) runProducePipeline() {
 
 					w.node.logger.log(NewLogEntry(LogLevelInfo, "just produced webhook ;)"))
 
-					r.done(nil)
 				}
 			}
 		}()
@@ -126,71 +110,18 @@ func (w *webhookManager) Enqueue(wh webhookRequest) error {
 	select {
 	case w.pubCh <- wh:
 	default:
-
+		timer := timers.SetTimer(time.Second * 5)
+		defer timers.ReleaseTimer(timer)
+		select {
+		case w.pubCh <- wh:
+		case <-timer.C:
+			return errors.New("kafka webhook producing timeout")
+		}
 	}
 
-	return wh.result()
+	return nil
 }
 
 type webhookRequest struct {
 	data []byte
-	err  chan error
-}
-
-func (r *webhookRequest) done(err error) {
-	r.err <- err
-}
-
-func (r *webhookRequest) result() error {
-	return <-r.err
-}
-
-func newChannelOccupiedWebhook(appId, signature, url string, data []byte) Webhook {
-	return Webhook{
-		Event:     WebhookEventChannelOccupied,
-		Id:        23412,
-		AppId:     appId,
-		Signature: signature,
-		Data:      data,
-	}
-}
-
-func newChannelVacatedWebhook(appId, signature, url string, data []byte) Webhook {
-	return Webhook{
-		Event:     WebhookEventChannelVacated,
-		Id:        23412,
-		AppId:     appId,
-		Signature: signature,
-		Data:      data,
-	}
-}
-
-func newJoinWebhook(appId, signature, url string, data []byte) Webhook {
-	return Webhook{
-		Event:     WebhookEventJoin,
-		Id:        23412,
-		AppId:     appId,
-		Signature: signature,
-		Data:      data,
-	}
-}
-
-func newPresenceRemovedWebhook(appId, signature, url string, data []byte) Webhook {
-	return Webhook{
-		Event:     WebhookEventJoin,
-		Id:        23412,
-		AppId:     appId,
-		Signature: signature,
-		Data:      data,
-	}
-}
-
-func newPublicationWebhook(appId, signature, url string, data []byte) Webhook {
-	return Webhook{
-		Event:     WebhookEventPublication,
-		Id:        23412,
-		AppId:     appId,
-		Signature: signature,
-		Data:      data,
-	}
 }

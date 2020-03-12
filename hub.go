@@ -47,13 +47,9 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *inter
 		return
 	}
 
-	cInfo := &clientproto.ClientInfo{
-		Id:   pub.ClientInfo.Id,
-		Info: pub.ClientInfo.Info,
-	}
 	publication := clientproto.Publication{
 		Data: pub.Data,
-		Info: cInfo,
+		Info: pub.ClientInfo,
 	}
 	data, err := publication.Marshal()
 	if err != nil {
@@ -61,8 +57,8 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *inter
 		//	todo
 	}
 
-	push := &Push{
-		Type: PushTypePublication,
+	push := &clientproto.Push{
+		Type: clientproto.PushType_PUBLICATION,
 		Data: data,
 	}
 
@@ -81,13 +77,11 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *inter
 
 	go func() {
 
-		clientInfo, _ := pub.ClientInfo.Marshal()
-
 		pubWh := webhooks.Publication{
 			Channel: channelName,
 			Uid:     pub.Uid,
 			Data:    nil,
-			Info:    clientInfo,
+			Info:    pub.ClientInfo,
 		}
 		pubWhBytes, _ := pubWh.Marshal()
 
@@ -110,7 +104,6 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *inter
 			whBytes, _ := wh.Marshal()
 
 			r := webhookRequest{
-				err:  make(chan error, 1),
 				data: whBytes,
 			}
 
@@ -131,14 +124,9 @@ func (h *Hub) BroadcastJoin(appKey string, jn *internalproto.Join) {
 		return
 	}
 
-	clientInfo := &clientproto.ClientInfo{
-		Id:   jn.ClientInfo.Id,
-		Info: jn.ClientInfo.Info,
-	}
-
 	join := clientproto.Join{
 		Channel: jn.Channel,
-		Info:    clientInfo,
+		Info:    jn.ClientInfo,
 	}
 
 	data, err := join.Marshal()
@@ -146,8 +134,8 @@ func (h *Hub) BroadcastJoin(appKey string, jn *internalproto.Join) {
 		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling join", map[string]interface{}{"error": err.Error()}))
 	}
 
-	push := &Push{
-		Type: PushTypeJoin,
+	push := &clientproto.Push{
+		Type: clientproto.PushType_JOIN,
 		Data: data,
 	}
 
@@ -174,12 +162,10 @@ func (h *Hub) BroadcastJoin(appKey string, jn *internalproto.Join) {
 	// webhooks //
 
 	go func() {
-
-		clientInfoBytes, _ := clientInfo.Marshal()
 		joinWh := webhooks.PresenceAdded{
 			Channel: jn.Channel,
 			Uid:     jn.Uid,
-			Info:    clientInfoBytes,
+			Info:    jn.ClientInfo,
 		}
 		joinWhData, _ := joinWh.Marshal()
 
@@ -201,7 +187,6 @@ func (h *Hub) BroadcastJoin(appKey string, jn *internalproto.Join) {
 			whData, _ := wh.Marshal()
 
 			h.node.webhook.Enqueue(webhookRequest{
-				err:  make(chan error, 1),
 				data: whData,
 			})
 
@@ -220,10 +205,7 @@ func (h *Hub) BroadcastLeave(appKey string, lv *internalproto.Leave) {
 		return
 	}
 
-	clientInfo := &clientproto.ClientInfo{
-		Id:   lv.ClientInfo.Id,
-		Info: lv.ClientInfo.Info,
-	}
+	clientInfo := lv.ClientInfo
 	leave := clientproto.Leave{
 		Channel: lv.Channel,
 		Info:    clientInfo,
@@ -234,8 +216,8 @@ func (h *Hub) BroadcastLeave(appKey string, lv *internalproto.Leave) {
 		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling leave", map[string]interface{}{"error": err.Error()}))
 	}
 
-	push := &Push{
-		Type: PushTypeLeave,
+	push := &clientproto.Push{
+		Type: clientproto.PushType_LEAVE,
 		Data: data,
 	}
 
@@ -262,12 +244,10 @@ func (h *Hub) BroadcastLeave(appKey string, lv *internalproto.Leave) {
 	// webhooks //
 
 	go func() {
-
-		clientInfoBytes, _ := clientInfo.Marshal()
 		leaveWh := webhooks.PresenceRemoved{
 			Channel: lv.Channel,
 			Uid:     lv.Uid,
-			Info:    clientInfoBytes,
+			Info:    lv.ClientInfo,
 		}
 
 		leaveWhData, _ := leaveWh.Marshal()
@@ -289,7 +269,6 @@ func (h *Hub) BroadcastLeave(appKey string, lv *internalproto.Leave) {
 			whData, _ := wh.Marshal()
 
 			whR := webhookRequest{
-				err:  make(chan error, 1),
 				data: whData,
 			}
 

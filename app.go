@@ -139,7 +139,7 @@ func (app *App) runSync() {
 
 }
 
-func (app *App) addSub(ch string, c *Client, info *ClientInfo) bool {
+func (app *App) addSub(ch string, c *Client, info []byte) bool {
 
 	first := false
 
@@ -160,7 +160,7 @@ func (app *App) addSub(ch string, c *Client, info *ClientInfo) bool {
 
 	app.Channels[ch].Clients[c.uid] = c
 
-	if len(info.Info) > 0 {
+	if len(info) > 0 {
 		app.Channels[ch].Info[c.uid] = info
 	}
 
@@ -200,7 +200,7 @@ func (app *App) makeChannel(name string) (*Channel, error) {
 	switch getChannelType(name) {
 	case "private":
 	case "presence":
-		ch.Info = make(map[string]*ClientInfo)
+		ch.Info = make(map[string][]byte)
 	default:
 
 	}

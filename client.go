@@ -84,7 +84,7 @@ func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, er
 	return client, nil
 }
 
-func (c *Client) clientInfo(ch string) *ClientInfo {
+func (c *Client) clientInfo(ch string) []byte {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -200,14 +200,11 @@ func (c *Client) unsubscribeForce(ch string) {
 		}
 
 		cInfo := c.clientInfo(ch)
-		if cInfo != nil {
-			cInfoBytes, _ := cInfo.Marshal()
-			leave.ClientInfo = cInfoBytes
-		}
+		leave.ClientInfo = cInfo
 
 		err = c.node.broker.PublishLeave(chId, leave)
 		if err != nil {
-			//	todo: sosat
+			c.node.logger.log(NewLogEntry(LogLevelError, "error publishing leave", map[string]interface{}{"uid": c.uid, "error": err.Error()}))
 		}
 	}
 }
@@ -330,7 +327,7 @@ type replyWriter struct {
 	write func(*clientproto.Reply) error
 }
 
-func (c *Client) HandleCommand(cmd *Command) *Disconnect {
+func (c *Client) HandleCommand(cmd *clientproto.Command) *Disconnect {
 
 	c.mu.Lock()
 	if c.closed {
@@ -357,20 +354,20 @@ func (c *Client) HandleCommand(cmd *Command) *Disconnect {
 	rw := &replyWriter{write}
 
 	switch cmd.Type {
-	case MethodTypeConnect:
+	case clientproto.MethodType_CONNECT:
 		disconnect = c.handleConnect(cmd.Data, rw)
-	case MethodTypeSubscribe:
+	case clientproto.MethodType_SUBSCRIBE:
 		disconnect = c.handleSubscribe(cmd.Data, rw)
-	case MethodTypeUnsubscribe:
+	case clientproto.MethodType_UNSUBSCRIBE:
 		disconnect = c.handleUnsubscribe(cmd.Data, rw)
-	case MethodTypePublish:
+	case clientproto.MethodType_PUBLISH:
 		disconnect = c.handlePublish(cmd.Data, rw)
-	case MethodTypePresence:
+	case clientproto.MethodType_PRESENCE:
 		disconnect = c.handlePresence(cmd.Data, rw)
-	case MethodTypePing:
+	case clientproto.MethodType_PING:
 		disconnect = c.handlePing(cmd.Data, rw)
 	default:
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorMethodNotFound,
 		})
 		if err != nil {
@@ -387,7 +384,7 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 	c.mu.RLock()
 	if c.authenticated {
 		c.mu.RUnlock()
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorAlreadyAuthorized,
 		})
 		if err != nil {
@@ -414,9 +411,9 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 	c.mu.RLock()
 	c.authenticated = true
 	switch p.Client {
-	case ClientTypeJs:
+	case clientproto.ClientType_JS:
 		c.client = "js"
-	case ClientTypeSwift:
+	case clientproto.ClientType_SWIFT:
 		c.client = "swift"
 	default:
 		return DisconnectBadRequest
@@ -433,13 +430,13 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 
 	expires := time.Now().Add(time.Hour).Unix()
 
-	res := &ConnectResult{
+	res := &clientproto.ConnectResult{
 		Uid:     c.uid,
 		Expires: expires,
 	}
 	bytesRes, _ := res.Marshal()
 
-	err = rw.write(&Reply{
+	err = rw.write(&clientproto.Reply{
 		Result: bytesRes,
 	})
 	if err != nil {
@@ -454,7 +451,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	c.mu.RLock()
 	if !c.authenticated {
 		c.mu.RUnlock()
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorUnauthorized,
 		})
 		if err != nil {
@@ -470,7 +467,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	p, err := clientproto.NewProtobufParamsDecoder().DecodeSubscribe(data)
 	if err != nil {
 		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling subscribe command", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
 		})
 		if err != nil {
@@ -480,7 +477,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	if p.Channel == "" {
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
 		})
 		if err != nil {
@@ -495,7 +492,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	c.mu.RUnlock()
 
 	if ok {
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorAlreadySubscribed,
 		})
 		if err != nil {
@@ -505,7 +502,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return nil
 	}
 
-	var clientInfo ClientInfo
+	var clientInfo []byte
 
 	switch getChannelType(p.Channel) {
 	case "private":
@@ -514,7 +511,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 		ok := verifySignature(signature, p.Signature)
 		if !ok {
-			err := rw.write(&Reply{
+			err := rw.write(&clientproto.Reply{
 				Error: ErrorInvalidSignature,
 			})
 			if err != nil {
@@ -529,7 +526,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 		ok := verifySignature(signature, p.Signature)
 		if !ok {
-			err := rw.write(&Reply{
+			err := rw.write(&clientproto.Reply{
 				Error: ErrorInvalidSignature,
 			})
 			if err != nil {
@@ -538,21 +535,12 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 			return nil
 		}
 
-		err := clientInfo.Unmarshal(p.Data)
-		if err != nil {
-			err := rw.write(&Reply{
-				Error: ErrorBadRequest,
-			})
-			if err != nil {
-				return DisconnectWriteError
-			}
-			return nil
-		}
+		clientInfo = p.Data
 
 	default:
 	}
 
-	first := c.app.addSub(p.Channel, c, &clientInfo)
+	first := c.app.addSub(p.Channel, c, clientInfo)
 	chId := makeChId(c.app.Secret, p.Channel)
 
 	c.Subscribe(p.Channel)
@@ -565,18 +553,18 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	if c.app.Options.JoinLeave {
-		err = c.node.broker.HandleSubscribe(chId, c.uid, &clientInfo, p)
+		err = c.node.broker.HandleSubscribe(chId, c.uid, clientInfo, p)
 		if err != nil {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling subscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
 		}
 	}
 
-	res := &SubscribeResult{
+	res := &clientproto.SubscribeResult{
 		Channel: p.Channel,
 	}
 	bytesRes, _ := res.Marshal()
 
-	err = rw.write(&Reply{
+	err = rw.write(&clientproto.Reply{
 		Result: bytesRes,
 	})
 	if err != nil {
@@ -591,7 +579,7 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	c.mu.RLock()
 	if !c.authenticated {
 		c.mu.RUnlock()
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorUnauthorized,
 		})
 		if err != nil {
@@ -611,7 +599,7 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	if p.Channel == "" {
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
 		})
 		if err != nil {
@@ -621,7 +609,7 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	if _, ok := c.channels[p.Channel]; !ok {
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorChannelNotFound,
 		})
 		if err != nil {
@@ -633,12 +621,11 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	last, err := c.app.removeSub(p.Channel, c)
 
 	chId := makeChId(c.app.Secret, p.Channel)
-	r := &UnsubscribeRequest{
+	r := &clientproto.UnsubscribeRequest{
 		Channel: p.Channel,
 	}
 
-	var info *ClientInfo
-	info = c.clientInfo(p.Channel)
+	info := c.clientInfo(p.Channel)
 
 	if !last {
 		err = c.node.broker.HandleUnsubscribe(chId, c.uid, info, r)
@@ -651,10 +638,10 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	c.Unsubscribe(p.Channel)
 
-	res := &UnsubscribeResult{}
+	res := &clientproto.UnsubscribeResult{}
 	bytesRes, _ := res.Marshal()
 
-	err = rw.write(&Reply{
+	err = rw.write(&clientproto.Reply{
 		Result: bytesRes,
 	})
 	if err != nil {
@@ -669,7 +656,7 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 	c.mu.RLock()
 	if !c.authenticated {
 		c.mu.RUnlock()
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorUnauthorized,
 		})
 		if err != nil {
@@ -690,7 +677,7 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 
 	_, ok := c.channels[p.Channel]
 	if !ok {
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorPermissionDenied,
 		})
 		if err != nil {
@@ -707,10 +694,10 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 		c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling publication", map[string]interface{}{"channelID": chId, "clientproto": c.uid, "error": err.Error()}))
 	}
 
-	res := &PublishResult{}
+	res := &clientproto.PublishResult{}
 	bytesRes, _ := res.Marshal()
 
-	err = rw.write(&Reply{
+	err = rw.write(&clientproto.Reply{
 		Result: bytesRes,
 	})
 	if err != nil {
@@ -725,7 +712,7 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 	c.mu.RLock()
 	if !c.authenticated {
 		c.mu.RUnlock()
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorUnauthorized,
 		})
 		if err != nil {
@@ -745,7 +732,7 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 
 	if p.Channel == "" {
 
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
 		})
 		if err != nil {
@@ -756,7 +743,7 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 	switch getChannelType(p.Channel) {
 	case "presence":
 	default:
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorChannelNotPresence,
 		})
 		if err != nil {
@@ -769,7 +756,7 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 	c.mu.Unlock()
 
 	if !ok {
-		err := rw.write(&Reply{
+		err := rw.write(&clientproto.Reply{
 			Error: ErrorPermissionDenied,
 		})
 		if err != nil {
@@ -777,19 +764,19 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 		}
 	}
 
-	presence := make(map[string]*ClientInfo, len(ch.Info))
+	presence := make(map[string][]byte, len(ch.Info))
 
 	chUsersInfo := ch.Info
 	for uid, info := range chUsersInfo {
 		presence[uid] = info
 	}
 
-	presenceRes := &PresenceResult{
+	presenceRes := &clientproto.PresenceResult{
 		Presence: presence,
 	}
 	bytesResult, _ := presenceRes.Marshal()
 
-	err = rw.write(&Reply{
+	err = rw.write(&clientproto.Reply{
 		Result: bytesResult,
 	})
 	if err != nil {
@@ -808,10 +795,10 @@ func (c *Client) handlePing(data []byte, rw *replyWriter) *Disconnect {
 		return DisconnectBadRequest
 	}
 
-	pingRes := &PingResult{}
+	pingRes := &clientproto.PingResult{}
 	bytesRes, _ := pingRes.Marshal()
 
-	err = rw.write(&Reply{
+	err = rw.write(&clientproto.Reply{
 		Result: bytesRes,
 	})
 	if err != nil {

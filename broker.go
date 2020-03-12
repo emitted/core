@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"github.com/sireax/core/internal/proto/clientproto"
 	"github.com/sireax/core/internal/proto/internalproto"
 	"github.com/sireax/core/internal/timers"
 	"log"
@@ -88,16 +89,16 @@ func (b *Broker) Unsubscribe(chId string) {
 	b.getShard(chId).Unsubscribe([]string{chId})
 }
 
-func (b *Broker) Publish(chId string, uid string, cInfo *ClientInfo, p *PublishRequest) error {
-	return b.getShard(chId).handlePublish(chId, uid, cInfo, p)
+func (b *Broker) Publish(chId string, uid string, clientInfo []byte, p *clientproto.PublishRequest) error {
+	return b.getShard(chId).handlePublish(chId, uid, clientInfo, p)
 }
 
-func (b *Broker) HandleSubscribe(chId string, uid string, p *ClientInfo, r *SubscribeRequest) error {
-	return b.getShard(chId).handleSubscribe(chId, uid, p, r)
+func (b *Broker) HandleSubscribe(chId string, uid string, clientInfo []byte, r *clientproto.SubscribeRequest) error {
+	return b.getShard(chId).handleSubscribe(chId, uid, clientInfo, r)
 }
 
-func (b *Broker) HandleUnsubscribe(chId string, uid string, p *ClientInfo, r *UnsubscribeRequest) error {
-	return b.getShard(chId).handleUnsubscribe(chId, uid, p, r)
+func (b *Broker) HandleUnsubscribe(chId string, uid string, clientInfo []byte, r *clientproto.UnsubscribeRequest) error {
+	return b.getShard(chId).handleUnsubscribe(chId, uid, clientInfo, r)
 }
 
 func (b *Broker) PublishJoin(chId string, join *internalproto.Join) error {
@@ -491,48 +492,36 @@ func (s *shard) Unsubscribe(channels []string) error {
 	return s.sendSubRequest(sub)
 }
 
-func (s *shard) handlePublish(chId string, uid string, cInfo *ClientInfo, r *PublishRequest) error {
+func (s *shard) handlePublish(chId string, uid string, clientInfo []byte, r *clientproto.PublishRequest) error {
 
 	pub := &internalproto.Publication{
-		Uid:     uid,
-		Channel: r.Channel,
-		Data:    r.Data,
-	}
-
-	if cInfo != nil {
-		cInfoBytes, _ := cInfo.Marshal()
-		pub.ClientInfo = cInfoBytes
+		Uid:        uid,
+		Channel:    r.Channel,
+		Data:       r.Data,
+		ClientInfo: clientInfo,
 	}
 
 	return s.Publish(chId, pub)
 
 }
 
-func (s *shard) handleSubscribe(chId string, uid string, cInfo *ClientInfo, r *SubscribeRequest) error {
+func (s *shard) handleSubscribe(chId string, uid string, clientInfo []byte, r *clientproto.SubscribeRequest) error {
 
 	join := &internalproto.Join{
-		Channel: r.Channel,
-		Uid:     uid,
-	}
-
-	if cInfo != nil {
-		cInfoBytes, _ := cInfo.Marshal()
-		join.ClientInfo = cInfoBytes
+		Channel:    r.Channel,
+		Uid:        uid,
+		ClientInfo: clientInfo,
 	}
 
 	return s.PublishJoin(chId, join)
 }
 
-func (s *shard) handleUnsubscribe(chId string, uid string, cInfo *ClientInfo, r *UnsubscribeRequest) error {
+func (s *shard) handleUnsubscribe(chId string, uid string, clientInfo []byte, r *clientproto.UnsubscribeRequest) error {
 
 	leave := &internalproto.Leave{
-		Channel: r.Channel,
-		Uid:     uid,
-	}
-
-	if cInfo != nil {
-		cInfoBytes, _ := cInfo.Marshal()
-		leave.ClientInfo = cInfoBytes
+		Channel:    r.Channel,
+		Uid:        uid,
+		ClientInfo: clientInfo,
 	}
 
 	return s.PublishLeave(chId, leave)
