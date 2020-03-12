@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package protocol;
+package clientproto;
 
 enum MethodType {
     CONNECT = 0;
@@ -53,12 +53,12 @@ message Publication {
 
 message Join {
     string channel = 1;
-    ClientInfo data = 3;
+    ClientInfo info = 3;
 }
 
 message Leave {
     string channel = 1;
-    ClientInfo data = 3;
+    ClientInfo info = 3;
 }
 
 

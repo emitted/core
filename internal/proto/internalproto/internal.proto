@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package internal;
+package internalproto;
 
 enum PacketType {
     PUBLICATION = 0;

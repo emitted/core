@@ -5,6 +5,7 @@ import (
 
 	"context"
 	"github.com/sireax/core/internal/proto/clientproto"
+	"github.com/sireax/core/internal/proto/internalproto"
 	"github.com/sireax/core/internal/uuid"
 	"sync"
 	"time"
@@ -188,23 +189,25 @@ func (c *Client) unsubscribeForce(ch string) {
 
 		last, err := c.app.removeSub(ch, c)
 		if last {
-
 			c.node.broker.Unsubscribe(chId)
 
 			return
 		}
 
-		leave := &Leave{
+		leave := &internalproto.Leave{
 			Channel: ch,
+			Uid:     c.uid,
 		}
 
-		if c.clientInfo(ch) != nil {
-			leave.Info = c.clientInfo(ch)
+		cInfo := c.clientInfo(ch)
+		if cInfo != nil {
+			cInfoBytes, _ := cInfo.Marshal()
+			leave.ClientInfo = cInfoBytes
 		}
 
 		err = c.node.broker.PublishLeave(chId, leave)
 		if err != nil {
-
+			//	todo: sosat
 		}
 	}
 }
@@ -562,7 +565,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	if c.app.Options.JoinLeave {
-		err = c.node.broker.HandleSubscribe(chId, p, &clientInfo)
+		err = c.node.broker.HandleSubscribe(chId, c.uid, &clientInfo, p)
 		if err != nil {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling subscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
 		}
@@ -630,7 +633,7 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	last, err := c.app.removeSub(p.Channel, c)
 
 	chId := makeChId(c.app.Secret, p.Channel)
-	usr := &UnsubscribeRequest{
+	r := &UnsubscribeRequest{
 		Channel: p.Channel,
 	}
 
@@ -638,7 +641,7 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	info = c.clientInfo(p.Channel)
 
 	if !last {
-		err = c.node.broker.HandleUnsubscribe(chId, usr, info)
+		err = c.node.broker.HandleUnsubscribe(chId, c.uid, info, r)
 		if err != nil {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling unsubscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
 		}
@@ -699,7 +702,7 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 	cInfo := c.clientInfo(p.Channel)
 
 	chId := makeChId(c.app.Secret, p.Channel)
-	err = c.node.broker.Publish(chId, cInfo, p)
+	err = c.node.broker.Publish(chId, c.uid, cInfo, p)
 	if err != nil {
 		c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling publication", map[string]interface{}{"channelID": chId, "clientproto": c.uid, "error": err.Error()}))
 	}

@@ -95,41 +95,45 @@ func (w *webhookManager) runProducePipeline() {
 	default:
 	}
 
-	for {
-		select {
-		case r := <-w.pubCh:
-
-			whpr = append(whpr, r)
-
-		loop:
-			for len(whpr) < 512 {
+	for i := 0; i < 10; i++ {
+		go func() {
+			for {
 				select {
 				case r := <-w.pubCh:
+
 					whpr = append(whpr, r)
-				default:
-					break loop
+
+				loop:
+					for len(whpr) < 512 {
+						select {
+						case r := <-w.pubCh:
+							whpr = append(whpr, r)
+						default:
+							break loop
+						}
+					}
+					for i := range whpr {
+
+						err := w.writer.WriteMessages(context.Background(), kafka.Message{
+							Key:   nil,
+							Value: whpr[i].data,
+							Time:  time.Now(),
+						})
+
+						if err != nil {
+							w.node.logger.log(NewLogEntry(LogLevelError, "error producing webhook", map[string]interface{}{"error": err.Error()}))
+							whpr[i].done(err)
+							continue
+						}
+
+						w.node.logger.log(NewLogEntry(LogLevelInfo, "just produced webhook ;)"))
+
+						whpr[i].done(nil)
+					}
+					whpr = nil
 				}
 			}
-			for i := range whpr {
-
-				err := w.writer.WriteMessages(context.Background(), kafka.Message{
-					Key:   nil,
-					Value: whpr[i].data,
-					Time:  time.Now(),
-				})
-
-				if err != nil {
-					w.node.logger.log(NewLogEntry(LogLevelError, "error producing webhook", map[string]interface{}{"error": err.Error()}))
-					whpr[i].done(err)
-					continue
-				}
-
-				w.node.logger.log(NewLogEntry(LogLevelInfo, "just produced webhook ;)"))
-
-				whpr[i].done(nil)
-			}
-			whpr = nil
-		}
+		}()
 	}
 }
 

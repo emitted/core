@@ -2,9 +2,12 @@ package core
 
 import (
 	"context"
+	"github.com/sireax/core/internal/proto/clientproto"
+	"github.com/sireax/core/internal/proto/internalproto"
 	"github.com/sireax/core/internal/proto/webhooks"
 	"log"
 	"sync"
+	"time"
 )
 
 // Hub struct contains all data and structs of clients,channels etc.
@@ -33,7 +36,7 @@ func (h *Hub) AddApp(app *App) {
 	h.mu.RUnlock()
 }
 
-func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *Publication) {
+func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *internalproto.Publication) {
 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -44,9 +47,18 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *Publi
 		return
 	}
 
-	data, err := pub.Marshal()
+	cInfo := &clientproto.ClientInfo{
+		Id:   pub.ClientInfo.Id,
+		Info: pub.ClientInfo.Info,
+	}
+	publication := clientproto.Publication{
+		Data: pub.Data,
+		Info: cInfo,
+	}
+	data, err := publication.Marshal()
 	if err != nil {
 		log.Fatal(err)
+		//	todo
 	}
 
 	push := &Push{
@@ -67,17 +79,49 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *Publi
 	//////////////
 	// webhooks //
 
-	//clientInfo, _ := pub.Info.Marshal()
-	//
-	//pubWh := webhooks.Publication{
-	//	Channel: channelName,
-	//	Uid:     pub.,
-	//	Data:    nil,
-	//}
+	go func() {
+
+		clientInfo, _ := pub.ClientInfo.Marshal()
+
+		pubWh := webhooks.Publication{
+			Channel: channelName,
+			Uid:     pub.Uid,
+			Data:    nil,
+			Info:    clientInfo,
+		}
+		pubWhBytes, _ := pubWh.Marshal()
+
+		for _, webhook := range app.Options.Webhooks {
+
+			if !webhook.Publication {
+				continue
+			}
+
+			wh := webhooks.Webhook{
+				Id:        0,
+				Timestamp: time.Now().Unix(),
+				Signature: "",
+				Event:     webhooks.Event_PUBLICATION,
+				AppId:     app.ID,
+				Url:       webhook.Url,
+				Data:      pubWhBytes,
+			}
+
+			whBytes, _ := wh.Marshal()
+
+			r := webhookRequest{
+				err:  make(chan error, 1),
+				data: whBytes,
+			}
+
+			h.node.webhook.Enqueue(r)
+		}
+
+	}()
 
 }
 
-func (h *Hub) BroadcastJoin(appKey string, join *Join) {
+func (h *Hub) BroadcastJoin(appKey string, jn *internalproto.Join) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -85,6 +129,16 @@ func (h *Hub) BroadcastJoin(appKey string, join *Join) {
 	if !ok {
 		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting join", map[string]interface{}{"error": "app is not found"}))
 		return
+	}
+
+	clientInfo := &clientproto.ClientInfo{
+		Id:   jn.ClientInfo.Id,
+		Info: jn.ClientInfo.Info,
+	}
+
+	join := clientproto.Join{
+		Channel: jn.Channel,
+		Info:    clientInfo,
 	}
 
 	data, err := join.Marshal()
@@ -119,40 +173,44 @@ func (h *Hub) BroadcastJoin(appKey string, join *Join) {
 	//////////////
 	// webhooks //
 
-	clientInfo, _ := join.Data.Marshal()
-	joinWh := webhooks.PresenceAdded{
-		Channel: join.Channel,
-		Uid:     join.Uid,
-		Info:    clientInfo,
-	}
-	joinWhData, _ := joinWh.Marshal()
+	go func() {
 
-	for _, webhook := range app.Options.Webhooks {
+		clientInfoBytes, _ := clientInfo.Marshal()
+		joinWh := webhooks.PresenceAdded{
+			Channel: jn.Channel,
+			Uid:     jn.Uid,
+			Info:    clientInfoBytes,
+		}
+		joinWhData, _ := joinWh.Marshal()
 
-		if !webhook.Presence {
-			continue
+		for _, webhook := range app.Options.Webhooks {
+
+			if !webhook.Presence {
+				continue
+			}
+
+			wh := webhooks.Webhook{
+				Id:        0,
+				Signature: "",
+				Event:     webhooks.Event_PRESENCE_ADDED,
+				AppId:     app.ID,
+				Url:       webhook.Url,
+				Data:      joinWhData,
+			}
+
+			whData, _ := wh.Marshal()
+
+			h.node.webhook.Enqueue(webhookRequest{
+				err:  make(chan error, 1),
+				data: whData,
+			})
+
 		}
 
-		wh := webhooks.Webhook{
-			Id:        0,
-			Signature: "",
-			Event:     webhooks.Event_PRESENCE_ADDED,
-			AppId:     app.ID,
-			Url:       webhook.Url,
-			Data:      joinWhData,
-		}
-
-		whData, _ := wh.Marshal()
-
-		h.node.webhook.Enqueue(webhookRequest{
-			err:  make(chan error, 1),
-			data: whData,
-		})
-
-	}
+	}()
 }
 
-func (h *Hub) BroadcastLeave(appKey string, leave *Leave) {
+func (h *Hub) BroadcastLeave(appKey string, lv *internalproto.Leave) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -160,6 +218,15 @@ func (h *Hub) BroadcastLeave(appKey string, leave *Leave) {
 	if !ok {
 		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting leave", map[string]interface{}{"error": "app is not found"}))
 		return
+	}
+
+	clientInfo := &clientproto.ClientInfo{
+		Id:   lv.ClientInfo.Id,
+		Info: lv.ClientInfo.Info,
+	}
+	leave := clientproto.Leave{
+		Channel: lv.Channel,
+		Info:    clientInfo,
 	}
 
 	data, err := leave.Marshal()
@@ -194,38 +261,43 @@ func (h *Hub) BroadcastLeave(appKey string, leave *Leave) {
 	//////////////
 	// webhooks //
 
-	clientInfo, _ := leave.Data.Marshal()
-	leaveWh := webhooks.PresenceRemoved{
-		Channel: leave.Channel,
-		Uid:     leave.Uid,
-		Info:    clientInfo,
-	}
+	go func() {
 
-	leaveWhData, _ := leaveWh.Marshal()
-	for _, webhook := range app.Options.Webhooks {
-
-		if !webhook.Presence {
-			continue
+		clientInfoBytes, _ := clientInfo.Marshal()
+		leaveWh := webhooks.PresenceRemoved{
+			Channel: lv.Channel,
+			Uid:     lv.Uid,
+			Info:    clientInfoBytes,
 		}
 
-		wh := webhooks.Webhook{
-			Id:        0,
-			Signature: "",
-			Event:     webhooks.Event_PRESENCE_REMOVED,
-			AppId:     app.ID,
-			Url:       webhook.Url,
-			Data:      leaveWhData,
+		leaveWhData, _ := leaveWh.Marshal()
+		for _, webhook := range app.Options.Webhooks {
+
+			if !webhook.Presence {
+				continue
+			}
+
+			wh := webhooks.Webhook{
+				Id:        0,
+				Signature: "",
+				Event:     webhooks.Event_PRESENCE_REMOVED,
+				AppId:     app.ID,
+				Url:       webhook.Url,
+				Data:      leaveWhData,
+			}
+
+			whData, _ := wh.Marshal()
+
+			whR := webhookRequest{
+				err:  make(chan error, 1),
+				data: whData,
+			}
+
+			h.node.webhook.Enqueue(whR)
+			h.node.logger.log(NewLogEntry(LogLevelInfo, "just enqueued webhook!"))
 		}
 
-		whData, _ := wh.Marshal()
-
-		whR := webhookRequest{
-			err:  make(chan error, 1),
-			data: whData,
-		}
-
-		h.node.webhook.Enqueue(whR)
-	}
+	}()
 
 }
 
