@@ -1,12 +1,10 @@
 package core
 
 import (
-	"context"
-	"github.com/pkg/errors"
-	"github.com/segmentio/kafka-go"
-	"github.com/segmentio/kafka-go/snappy"
+	//"github.com/pkg/errors"
+	"github.com/Shopify/sarama"
 	"github.com/sireax/core/internal/proto/webhooks"
-	"github.com/sireax/core/internal/timers"
+	//"github.com/sireax/core/internal/timers"
 	"time"
 )
 
@@ -44,7 +42,7 @@ type webhookManager struct {
 
 	pubCh chan webhookRequest
 
-	writer *kafka.Writer
+	producer sarama.AsyncProducer
 }
 
 func NewWebhookManager(node *Node, config webhookConfig) *webhookManager {
@@ -58,21 +56,30 @@ func NewWebhookManager(node *Node, config webhookConfig) *webhookManager {
 
 func (w *webhookManager) Run() error {
 
-	dialer := &kafka.Dialer{
-		Timeout:  10 * time.Second,
-		ClientID: w.node.uid,
+	//dialer := &kafka.Dialer{
+	//	Timeout:  10 * time.Second,
+	//	ClientID: w.node.uid,
+	//}
+
+	//config := kafka.WriterConfig{
+	//	Brokers:          []string{w.config.address},
+	//	Topic:            w.config.topic,
+	//	Balancer:         &kafka.LeastBytes{},
+	//	Dialer:           dialer,
+	//	WriteTimeout:     10 * time.Second,
+	//	ReadTimeout:      10 * time.Second,
+	//	CompressionCodec: snappy.NewCompressionCodec(),
+	//}
+
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
+	producer, err := sarama.NewAsyncProducer([]string{"localhost:9092"}, config)
+	if err != nil {
+		w.node.logger.log(NewLogEntry(LogLevelError, "error setting up kafka", map[string]interface{}{"error": err.Error()}))
 	}
 
-	config := kafka.WriterConfig{
-		Brokers:          []string{w.config.address},
-		Topic:            w.config.topic,
-		Balancer:         &kafka.LeastBytes{},
-		Dialer:           dialer,
-		WriteTimeout:     10 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		CompressionCodec: snappy.NewCompressionCodec(),
-	}
-	w.writer = kafka.NewWriter(config)
+	w.producer = producer
 
 	go runForever(func() {
 		w.runProducePipeline()
@@ -84,7 +91,6 @@ func (w *webhookManager) Run() error {
 }
 
 func (w *webhookManager) runProducePipeline() {
-	var whpr []webhookRequest
 
 	//pingTicker := time.NewTicker(time.Second)
 	//defer pingTicker.Stop()
@@ -101,36 +107,15 @@ func (w *webhookManager) runProducePipeline() {
 				select {
 				case r := <-w.pubCh:
 
-					whpr = append(whpr, r)
-
-				loop:
-					for len(whpr) < 512 {
-						select {
-						case r := <-w.pubCh:
-							whpr = append(whpr, r)
-						default:
-							break loop
-						}
+					w.producer.Input() <- &sarama.ProducerMessage{
+						Topic:     "emitted-server-webhooks",
+						Value:     sarama.ByteEncoder(r.data),
+						Timestamp: time.Now(),
 					}
-					for i := range whpr {
 
-						err := w.writer.WriteMessages(context.Background(), kafka.Message{
-							Key:   nil,
-							Value: whpr[i].data,
-							Time:  time.Now(),
-						})
+					w.node.logger.log(NewLogEntry(LogLevelInfo, "just produced webhook ;)"))
 
-						if err != nil {
-							w.node.logger.log(NewLogEntry(LogLevelError, "error producing webhook", map[string]interface{}{"error": err.Error()}))
-							whpr[i].done(err)
-							continue
-						}
-
-						w.node.logger.log(NewLogEntry(LogLevelInfo, "just produced webhook ;)"))
-
-						whpr[i].done(nil)
-					}
-					whpr = nil
+					r.done(nil)
 				}
 			}
 		}()
@@ -141,13 +126,7 @@ func (w *webhookManager) Enqueue(wh webhookRequest) error {
 	select {
 	case w.pubCh <- wh:
 	default:
-		timer := timers.SetTimer(time.Second * 5)
-		defer timers.ReleaseTimer(timer)
-		select {
-		case w.pubCh <- wh:
-		case <-timer.C:
-			return errors.New("kafka webhook producing timeout")
-		}
+
 	}
 
 	return wh.result()

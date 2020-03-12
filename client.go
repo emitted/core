@@ -52,7 +52,7 @@ func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, er
 		authenticated: false,
 	}
 
-	// Creating message writer config
+	// Creating message producer config
 	messageWriterConf := writerConfig{
 		WriteFn: func(data []byte) error {
 			err := client.transport.Write(data)
@@ -74,7 +74,7 @@ func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, er
 		},
 	}
 
-	// Setting clientproto's message writer
+	// Setting clientproto's message producer
 	client.messageWriter = newWriter(messageWriterConf)
 
 	if !client.authenticated {
@@ -270,7 +270,7 @@ func (c *Client) Close(disconnect *Disconnect) {
 
 	err := c.messageWriter.close()
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelError, "error closing message writer", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelError, "error closing message producer", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
 	}
 
 	err = c.transport.Close(disconnect)

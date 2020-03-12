@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/FZambia/eagle v0.0.1
+	github.com/Shopify/sarama v1.26.1 // indirect
 	github.com/centrifugal/centrifuge v0.7.0
 	github.com/fasthttp/websocket v1.4.2
 	github.com/gogo/protobuf v1.3.1
