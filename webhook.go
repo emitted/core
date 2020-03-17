@@ -2,9 +2,7 @@ package core
 
 import (
 	"github.com/Shopify/sarama"
-	"github.com/pkg/errors"
 	"github.com/sireax/core/internal/proto/webhooks"
-	"github.com/sireax/core/internal/timers"
 	"time"
 )
 
@@ -32,8 +30,6 @@ var DefaultWebhookConfig = webhookConfig{
 	address:   "localhost:9092",
 	topic:     "emitted-channels-webhook",
 	partition: 0,
-
-	writeTimeout: 10,
 }
 
 type webhookManager struct {
@@ -64,7 +60,7 @@ func (w *webhookManager) Run() error {
 
 	producer, err := sarama.NewAsyncProducer([]string{"localhost:9092"}, config)
 	if err != nil {
-		w.node.logger.log(NewLogEntry(LogLevelError, "error setting up kafka", map[string]interface{}{"error": err.Error()}))
+		return err
 	}
 
 	w.producer = producer
@@ -86,23 +82,36 @@ func (w *webhookManager) runProducePipeline() {
 	default:
 	}
 
-	for i := 0; i < 10; i++ {
-		go func() {
-			for {
-				select {
-				case r := <-w.pubCh:
+	ticker := time.NewTicker(time.Second * 5)
+	pingMsg := &sarama.ProducerMessage{
+		Topic: "emitted-server-webhooks-ping",
+		Value: sarama.StringEncoder("PING"),
+	}
 
-					w.producer.Input() <- &sarama.ProducerMessage{
-						Topic:     "emitted-server-webhooks",
-						Value:     sarama.ByteEncoder(r.data),
-						Timestamp: time.Now(),
-					}
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				w.producer.Input() <- pingMsg
 
-					w.node.logger.log(NewLogEntry(LogLevelInfo, "just produced webhook ;)"))
+			case r := <-w.pubCh:
 
+				w.producer.Input() <- &sarama.ProducerMessage{
+					Topic:     "emitted-server-webhooks",
+					Value:     sarama.ByteEncoder(r.data),
+					Timestamp: time.Now(),
 				}
+
 			}
-		}()
+
+		}
+	}()
+
+	for {
+		select {
+		case err := <-w.producer.Errors():
+			w.node.logger.log(NewLogEntry(LogLevelError, "failed to produce webhook", map[string]interface{}{"error": err.Error()}))
+		}
 	}
 }
 
@@ -110,13 +119,6 @@ func (w *webhookManager) Enqueue(wh webhookRequest) error {
 	select {
 	case w.pubCh <- wh:
 	default:
-		timer := timers.SetTimer(time.Second * 5)
-		defer timers.ReleaseTimer(timer)
-		select {
-		case w.pubCh <- wh:
-		case <-timer.C:
-			return errors.New("kafka webhook producing timeout")
-		}
 	}
 
 	return nil

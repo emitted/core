@@ -199,8 +199,8 @@ func (c *Client) unsubscribeForce(ch string) {
 			Uid:     c.uid,
 		}
 
-		cInfo := c.clientInfo(ch)
-		leave.ClientInfo = cInfo
+		clientInfo := c.clientInfo(ch)
+		leave.ClientInfo = clientInfo
 
 		err = c.node.broker.PublishLeave(chId, leave)
 		if err != nil {
@@ -686,10 +686,10 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 		return nil
 	}
 
-	cInfo := c.clientInfo(p.Channel)
+	clientInfo := c.clientInfo(p.Channel)
 
 	chId := makeChId(c.app.Secret, p.Channel)
-	err = c.node.broker.Publish(chId, c.uid, cInfo, p)
+	err = c.node.broker.Publish(chId, c.uid, clientInfo, p)
 	if err != nil {
 		c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling publication", map[string]interface{}{"channelID": chId, "clientproto": c.uid, "error": err.Error()}))
 	}

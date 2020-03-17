@@ -170,6 +170,18 @@ func (n *Node) initMetrics() error {
 	return nil
 }
 
+func (n *Node) AddPresence(ch, uid string, clientInfo []byte) error {
+	return n.broker.AddPresence(ch, uid, clientInfo)
+}
+
+func (n *Node) RemovePresence(ch, uid string) error {
+	return n.broker.RemovePresence(ch, uid)
+}
+
+func (n *Node) Presence(ch string) (map[string][]byte, error) {
+	return n.broker.Presence(ch)
+}
+
 func (n *Node) pubNode() error {
 
 	n.mu.RLock()

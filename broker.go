@@ -33,13 +33,19 @@ type BrokerConfig struct {
 }
 
 type shard struct {
-	node        *Node
-	broker      *Broker
-	config      BrokerShardConfig
-	pool        *redis.Pool
-	subCh       chan subRequest
-	subMessages chan redis.Message
-	pubMessages chan pubRequest
+	node   *Node
+	broker *Broker
+	config BrokerShardConfig
+	pool   *redis.Pool
+
+	subCh        chan subRequest
+	subMessages  chan redis.Message
+	pubMessages  chan pubRequest
+	dataMessages chan dataRequest
+
+	presenceScript    *redis.Script
+	addPresenceScript *redis.Script
+	remPresenceScript *redis.Script
 }
 
 type BrokerShardConfig struct {
@@ -81,6 +87,17 @@ func NewBroker(n *Node, config *BrokerConfig) (*Broker, error) {
 	}, nil
 }
 
+func (b *Broker) Run() error {
+	for _, shard := range b.shards {
+		shard.broker = b
+		err := shard.Run()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (b *Broker) Subscribe(chId string) error {
 	return b.getShard(chId).Subscribe([]string{chId})
 }
@@ -107,6 +124,18 @@ func (b *Broker) PublishJoin(chId string, join *internalproto.Join) error {
 
 func (b *Broker) PublishLeave(chId string, leave *internalproto.Leave) error {
 	return b.getShard(chId).PublishLeave(chId, leave)
+}
+
+func (b *Broker) AddPresence(ch string, uid string, clientInfo []byte) error {
+	return b.getShard(ch).addPresence(ch, uid, clientInfo)
+}
+
+func (b *Broker) RemovePresence(ch, uid string) error {
+	return b.getShard(ch).removePresence(ch, uid)
+}
+
+func (b *Broker) Presence(ch string) (map[string][]byte, error) {
+	return b.getShard(ch).presence(ch)
 }
 
 func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
@@ -176,26 +205,101 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 	}
 }
 
-func (b *Broker) Run() error {
-	for _, shard := range b.shards {
-		shard.broker = b
-		err := shard.Run()
-		if err != nil {
-			return err
+var addPresenceSource = `
+	redis.call("hset", KEYS[1], ARGV[1], ARGV[2])
+`
+
+var remPresenceSource = `
+	redis.call("hdel", KEYS[1], ARGV[1])
+`
+
+var presenceSource = `
+	return redis.call("hgetall", KEYS[1])
+`
+
+func (s *shard) addPresence(ch, uid string, clientInfo []byte) error {
+	hashKey := s.presenceHashKey(ch)
+
+	dr := newDataRequest(dataOpAddPresence, []interface{}{hashKey, uid, clientInfo})
+	resp := s.getDataResponse(dr)
+
+	return resp.err
+}
+
+func (s *shard) removePresence(ch, uid string) error {
+	hashKey := s.presenceHashKey(ch)
+
+	dr := newDataRequest(dataOpRemovePresence, []interface{}{hashKey, uid})
+	resp := s.getDataResponse(dr)
+
+	return resp.err
+}
+
+func (s *shard) presence(ch string) (map[string][]byte, error) {
+	hashKey := s.presenceHashKey(ch)
+
+	dr := newDataRequest(dataOpPresence, []interface{}{hashKey})
+	resp := s.getDataResponse(dr)
+
+	return s.mapStringClientInfo(resp.reply, nil)
+}
+
+func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string][]byte, error) {
+	values, err := redis.Values(reply, err)
+
+	if err != nil {
+		return nil, err
+	}
+	if len(values)%2 != 0 {
+		return nil, errors.New("mapStringClientInfo expects even number of values result")
+	}
+
+	m := make(map[string][]byte, len(values))
+
+	for i := 0; i < len(values); i += 2 {
+		key, okKey := values[i].([]byte)
+		value, okValue := values[i+1].([]byte)
+		if !okKey || !okValue {
+			return nil, errors.New("scanMap key not a bulk string value")
+		}
+
+		m[string(key)] = value
+	}
+
+	return m, nil
+}
+
+func (s *shard) getDataResponse(r dataRequest) *dataResponse {
+	select {
+	case s.dataMessages <- r:
+	default:
+		timer := timers.SetTimer(time.Second * 5)
+		defer timers.ReleaseTimer(timer)
+		select {
+		case s.dataMessages <- r:
+		case <-timer.C:
+			return &dataResponse{nil, errors.New("redis timeout")}
 		}
 	}
-	return nil
+	return r.result()
+}
+
+func (s *shard) presenceHashKey(ch string) string {
+	return "client.presence.data." + ch
 }
 
 func newShard(n *Node, conf BrokerShardConfig) (*shard, error) {
 	shard := &shard{
-		node:   n,
-		config: conf,
-		pool:   newPool(n, conf),
+		node:              n,
+		config:            conf,
+		pool:              newPool(n, conf),
+		pubMessages:       make(chan pubRequest),
+		subCh:             make(chan subRequest),
+		subMessages:       make(chan redis.Message),
+		presenceScript:    redis.NewScript(2, presenceSource),
+		addPresenceScript: redis.NewScript(2, addPresenceSource),
+		remPresenceScript: redis.NewScript(2, remPresenceSource),
 	}
-	shard.pubMessages = make(chan pubRequest)
-	shard.subCh = make(chan subRequest)
-	shard.subMessages = make(chan redis.Message)
 	return shard, nil
 }
 
@@ -209,6 +313,10 @@ func (s *shard) Run() error {
 
 	go runForever(func() {
 		s.runPublishPipeline()
+	})
+
+	go runForever(func() {
+		s.RunDataPipeline()
 	})
 
 	go runForever(func() {
@@ -480,6 +588,74 @@ func (s *shard) runPubSub() {
 	}
 }
 
+func (s *shard) RunDataPipeline() {
+	conn := s.pool.Get()
+
+	err := s.addPresenceScript.Load(conn)
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error loading add presence script", map[string]interface{}{"error": err}))
+		conn.Close()
+		return
+	}
+
+	err = s.remPresenceScript.Load(conn)
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error loading remove presence script", map[string]interface{}{"error": err}))
+		conn.Close()
+		return
+	}
+
+	err = s.presenceScript.Load(conn)
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error loading presence script", map[string]interface{}{"error": err}))
+		conn.Close()
+		return
+	}
+
+	conn.Close()
+
+	var drs []dataRequest
+
+	for dr := range s.dataMessages {
+		drs = append(drs, dr)
+	loop:
+		for len(drs) < 512 {
+			select {
+			case dr := <-s.dataMessages:
+				drs = append(drs, dr)
+			default:
+				break loop
+			}
+		}
+
+		conn := s.pool.Get()
+
+		for i := range drs {
+			switch drs[i].op {
+			case dataOpAddPresence:
+				s.addPresenceScript.SendHash(conn, drs[i].args...)
+			case dataOpRemovePresence:
+				s.remPresenceScript.SendHash(conn, drs[i].args...)
+			case dataOpPresence:
+				s.presenceScript.SendHash(conn, drs[i].args...)
+			case dataOpChannels:
+			}
+		}
+
+		err := conn.Flush()
+
+		if err != nil {
+			for i := range drs {
+				drs[i].done(nil, err)
+			}
+			s.node.logger.log(NewLogEntry(LogLevelError, "error flushing data pipeline", map[string]interface{}{"error": err.Error()}))
+		}
+
+		conn.Close()
+		drs = nil
+	}
+}
+
 // HandleSubscribe ...
 func (s *shard) Subscribe(channels []string) error {
 	sub := newSubRequest(channels, true)
@@ -746,4 +922,43 @@ func newSubRequest(channels []string, subscribe bool) subRequest {
 		subscribe: subscribe,
 		err:       make(chan error, 1),
 	}
+}
+
+type dataOp int
+
+const (
+	dataOpAddPresence dataOp = iota
+	dataOpRemovePresence
+	dataOpPresence
+	dataOpChannels
+)
+
+type dataResponse struct {
+	reply interface{}
+	err   error
+}
+
+type dataRequest struct {
+	op   dataOp
+	args []interface{}
+	resp chan *dataResponse
+}
+
+func newDataRequest(op dataOp, args []interface{}) dataRequest {
+	return dataRequest{op: op, args: args, resp: make(chan *dataResponse, 1)}
+}
+
+func (dr *dataRequest) done(reply interface{}, err error) {
+	if dr.resp == nil {
+		return
+	}
+	dr.resp <- &dataResponse{reply: reply, err: err}
+}
+
+func (dr *dataRequest) result() *dataResponse {
+	if dr.resp == nil {
+		// No waiting, as caller didn't care about response.
+		return &dataResponse{}
+	}
+	return <-dr.resp
 }
