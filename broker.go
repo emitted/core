@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,7 +22,16 @@ const (
 	defaultPoolSize       = 256
 )
 
-// Broker structure represents message broker, connected with API
+var (
+	addPresenceSource = `redis.call("hset", KEYS[1], ARGV[1], ARGV[2])`
+
+	remPresenceSource = `redis.call("hdel", KEYS[1], ARGV[1])`
+
+	presenceSource = `return redis.call("hgetall", KEYS[1])`
+
+	getPresenceSource = `return redis.call("hget", KEYS[1], ARGV[1])`
+)
+
 type Broker struct {
 	node   *Node
 	shards []*shard
@@ -43,6 +53,7 @@ type shard struct {
 	pubMessages  chan pubRequest
 	dataMessages chan dataRequest
 
+	getPresenceScript *redis.Script
 	presenceScript    *redis.Script
 	addPresenceScript *redis.Script
 	remPresenceScript *redis.Script
@@ -98,12 +109,15 @@ func (b *Broker) Run() error {
 	return nil
 }
 
+//////////////////////
+////// REDIRECTS /////
+
 func (b *Broker) Subscribe(chId string) error {
 	return b.getShard(chId).Subscribe([]string{chId})
 }
 
-func (b *Broker) Unsubscribe(chId string) {
-	b.getShard(chId).Unsubscribe([]string{chId})
+func (b *Broker) Unsubscribe(chId string) error {
+	return b.getShard(chId).Unsubscribe([]string{chId})
 }
 
 func (b *Broker) Publish(chId string, uid string, clientInfo []byte, p *clientproto.PublishRequest) error {
@@ -136,6 +150,10 @@ func (b *Broker) RemovePresence(ch, uid string) error {
 
 func (b *Broker) Presence(ch string) (map[string][]byte, error) {
 	return b.getShard(ch).presence(ch)
+}
+
+func (b *Broker) GetPresence(ch, uid string) ([]byte, error) {
+	return b.getShard(ch).getPresence(ch, uid)
 }
 
 func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
@@ -205,18 +223,6 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 	}
 }
 
-var addPresenceSource = `
-	redis.call("hset", KEYS[1], ARGV[1], ARGV[2])
-`
-
-var remPresenceSource = `
-	redis.call("hdel", KEYS[1], ARGV[1])
-`
-
-var presenceSource = `
-	return redis.call("hgetall", KEYS[1])
-`
-
 func (s *shard) addPresence(ch, uid string, clientInfo []byte) error {
 	hashKey := s.presenceHashKey(ch)
 
@@ -242,6 +248,16 @@ func (s *shard) presence(ch string) (map[string][]byte, error) {
 	resp := s.getDataResponse(dr)
 
 	return s.mapStringClientInfo(resp.reply, nil)
+}
+
+func (s *shard) getPresence(ch, uid string) ([]byte, error) {
+	hashKey := s.presenceHashKey(ch)
+
+	dr := newDataRequest(dataOpGetPresence, []interface{}{hashKey, uid})
+	resp := s.getDataResponse(dr)
+
+	s.node.logger.log(NewLogEntry(LogLevelDebug, "received presence data", map[string]interface{}{"response": resp.reply}))
+	return resp.reply.([]byte), resp.err
 }
 
 func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string][]byte, error) {
@@ -278,7 +294,7 @@ func (s *shard) getDataResponse(r dataRequest) *dataResponse {
 		select {
 		case s.dataMessages <- r:
 		case <-timer.C:
-			return &dataResponse{nil, errors.New("redis timeout")}
+			return &dataResponse{r.result(), errors.New("redis timeout")}
 		}
 	}
 	return r.result()
@@ -290,15 +306,19 @@ func (s *shard) presenceHashKey(ch string) string {
 
 func newShard(n *Node, conf BrokerShardConfig) (*shard, error) {
 	shard := &shard{
-		node:              n,
-		config:            conf,
-		pool:              newPool(n, conf),
-		pubMessages:       make(chan pubRequest),
-		subCh:             make(chan subRequest),
-		subMessages:       make(chan redis.Message),
-		presenceScript:    redis.NewScript(2, presenceSource),
-		addPresenceScript: redis.NewScript(2, addPresenceSource),
-		remPresenceScript: redis.NewScript(2, remPresenceSource),
+		node:   n,
+		config: conf,
+		pool:   newPool(n, conf),
+
+		pubMessages:  make(chan pubRequest),
+		subCh:        make(chan subRequest),
+		subMessages:  make(chan redis.Message),
+		dataMessages: make(chan dataRequest),
+
+		presenceScript:    redis.NewScript(1, presenceSource),
+		getPresenceScript: redis.NewScript(1, getPresenceSource),
+		addPresenceScript: redis.NewScript(1, addPresenceSource),
+		remPresenceScript: redis.NewScript(1, remPresenceSource),
 	}
 	return shard, nil
 }
@@ -589,6 +609,7 @@ func (s *shard) runPubSub() {
 }
 
 func (s *shard) RunDataPipeline() {
+
 	conn := s.pool.Get()
 
 	err := s.addPresenceScript.Load(conn)
@@ -608,6 +629,13 @@ func (s *shard) RunDataPipeline() {
 	err = s.presenceScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading presence script", map[string]interface{}{"error": err}))
+		conn.Close()
+		return
+	}
+
+	err = s.getPresenceScript.Load(conn)
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error loading get presence script", map[string]interface{}{"error": err}))
 		conn.Close()
 		return
 	}
@@ -638,6 +666,8 @@ func (s *shard) RunDataPipeline() {
 				s.remPresenceScript.SendHash(conn, drs[i].args...)
 			case dataOpPresence:
 				s.presenceScript.SendHash(conn, drs[i].args...)
+			case dataOpGetPresence:
+				s.getPresenceScript.SendHash(conn, drs[i].args...)
 			case dataOpChannels:
 			}
 		}
@@ -651,6 +681,22 @@ func (s *shard) RunDataPipeline() {
 			s.node.logger.log(NewLogEntry(LogLevelError, "error flushing data pipeline", map[string]interface{}{"error": err.Error()}))
 		}
 
+		var noScriptError bool
+		for i := range drs {
+			reply, err := conn.Receive()
+			s.node.logger.log(NewLogEntry(LogLevelDebug, "received reply", map[string]interface{}{"reply": reply}))
+			if err != nil {
+				if e, ok := err.(redis.Error); ok && strings.HasPrefix(string(e), "NOSCRIPT ") {
+					noScriptError = true
+				}
+			}
+			drs[i].done(reply, err)
+		}
+		if noScriptError {
+			// Start this func from the beginning and LOAD missing script.
+			conn.Close()
+			return
+		}
 		conn.Close()
 		drs = nil
 	}
@@ -880,7 +926,6 @@ func (s *shard) sendPubRequest(pub pubRequest) error {
 		case s.pubMessages <- pub:
 		case <-timer.C:
 			return errors.New("redis timeout")
-
 		}
 	}
 
@@ -930,6 +975,7 @@ const (
 	dataOpAddPresence dataOp = iota
 	dataOpRemovePresence
 	dataOpPresence
+	dataOpGetPresence
 	dataOpChannels
 )
 

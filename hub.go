@@ -48,9 +48,11 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *inter
 	}
 
 	publication := clientproto.Publication{
-		Data: pub.Data,
-		Info: pub.ClientInfo,
+		Topic: pub.Topic,
+		Data:  pub.Data,
+		Info:  pub.ClientInfo,
 	}
+
 	data, err := publication.Marshal()
 	if err != nil {
 		log.Fatal(err)

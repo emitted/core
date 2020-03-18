@@ -182,6 +182,10 @@ func (n *Node) Presence(ch string) (map[string][]byte, error) {
 	return n.broker.Presence(ch)
 }
 
+func (n *Node) GetPresence(ch, uid string) ([]byte, error) {
+	return n.broker.GetPresence(ch, uid)
+}
+
 func (n *Node) pubNode() error {
 
 	n.mu.RLock()

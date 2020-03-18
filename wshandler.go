@@ -153,9 +153,29 @@ func NewWebsocketHandler(c WebsocketConfig, n *Node) *WebsocketHandler {
 
 func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
-	protocol := "6.0.0"
+	var protocol string = "6.0.0"
 
-	app, err := GetApp(s.node, "sec092834ret")
+	keys1, ok := r.URL.Query()["protocol"]
+	if !ok {
+		s.node.logger.log(NewLogEntry(LogLevelError, "protocol version was not specified"))
+	} else {
+		protocol = keys1[0]
+	}
+
+	var appSec string
+
+	keys2, ok := r.URL.Query()["secret"]
+	if !ok {
+		s.node.logger.log(NewLogEntry(LogLevelError, "client didn't provide app secret"))
+		//fmt.Fprintf(rw, "app secret MUST be specified")
+		rw.WriteHeader(http.StatusForbidden)
+		return
+	} else {
+		appSec = keys2[0]
+	}
+
+	app, err := GetApp(s.node, appSec)
+	//app, err := GetApp(s.node, "sec092834ret")
 	if err != nil {
 		return
 	}

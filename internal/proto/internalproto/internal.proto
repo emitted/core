@@ -15,9 +15,10 @@ message Packet {
 
 message Publication {
     string channel = 1;
-    string uid = 2;
+    string topic = 2;
     bytes data = 3;
-    bytes clientInfo = 4;
+    string uid = 4;
+    bytes clientInfo = 5;
 }
 
 message Join {

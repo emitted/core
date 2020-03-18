@@ -16,49 +16,35 @@ type AppStats struct {
 }
 
 func (s *AppStats) getConns() int {
-	s.mu.RLock()
 	conns := s.Connections
-	s.mu.RUnlock()
 
 	return conns
 }
 
 func (s *AppStats) getMsgs() int {
-	s.mu.RLock()
 	msgs := s.Messages
-	s.mu.RUnlock()
 
 	return msgs
 }
 
 func (s *AppStats) IncrementConns() {
-	s.mu.Lock()
 	s.Connections++
-	s.mu.Unlock()
 }
 
 func (s *AppStats) DecrementConns() {
-	s.mu.Lock()
 	s.Connections--
-	s.mu.Unlock()
 }
 
 func (s *AppStats) IncrementMsgs() {
-	s.mu.Lock()
 	s.Messages++
-	s.mu.Unlock()
 }
 
 func (s *AppStats) IncrementJoin() {
-	s.mu.Lock()
 	s.Join++
-	s.mu.Unlock()
 }
 
 func (s *AppStats) IncrementLeave() {
-	s.mu.Lock()
 	s.Leave++
-	s.mu.Unlock()
 }
 
 type App struct {
@@ -107,6 +93,8 @@ func GetApp(n *Node, secret string) (*App, error) {
 }
 
 func NewApp(n *Node, dbApp database.App) *App {
+
+	n.logger.log(NewLogEntry(LogLevelDebug, "db app", map[string]interface{}{"db app": dbApp}))
 	app := &App{
 		ID:     dbApp.Id,
 		Secret: dbApp.Secret,
@@ -114,6 +102,9 @@ func NewApp(n *Node, dbApp database.App) *App {
 
 		Clients:  make(map[string]*Client),
 		Channels: make(map[string]*Channel),
+
+		MaxConnections: dbApp.MaxConnections,
+		MaxMessages:    dbApp.MaxMessages,
 
 		Options: dbApp.Options,
 		Stats: AppStats{
@@ -139,7 +130,7 @@ func (app *App) runSync() {
 
 }
 
-func (app *App) addSub(ch string, c *Client, info []byte) bool {
+func (app *App) addSub(ch string, c *Client) bool {
 
 	first := false
 
@@ -160,14 +151,10 @@ func (app *App) addSub(ch string, c *Client, info []byte) bool {
 
 	app.Channels[ch].Clients[c.uid] = c
 
-	if len(info) > 0 {
-		app.Channels[ch].Info[c.uid] = info
-	}
-
 	return first
 }
 
-func (app *App) removeSub(ch string, c *Client) (bool, error) {
+func (app *App) removeSub(ch string, uid string) (bool, error) {
 
 	app.mu.Lock()
 	defer app.mu.Unlock()
@@ -178,7 +165,7 @@ func (app *App) removeSub(ch string, c *Client) (bool, error) {
 
 	lastClient := false
 
-	delete(app.Channels[ch].Clients, c.uid)
+	delete(app.Channels[ch].Clients, uid)
 
 	if len(app.Channels[ch].Clients) == 0 {
 		lastClient = true
@@ -195,14 +182,6 @@ func (app *App) makeChannel(name string) (*Channel, error) {
 		Name:    name,
 		App:     app,
 		Clients: map[string]*Client{},
-	}
-
-	switch getChannelType(name) {
-	case "private":
-	case "presence":
-		ch.Info = make(map[string][]byte)
-	default:
-
 	}
 
 	return ch, nil

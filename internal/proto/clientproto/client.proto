@@ -41,7 +41,8 @@ message Push {
 }
 
 message Publication {
-    string channel = 1;
+    string topic = 1;
+    string channel = 2;
     bytes data = 3;
     bytes info = 4;
 }

@@ -2,17 +2,18 @@ package database
 
 import "github.com/pkg/errors"
 
-type Options struct {
-	JoinLeave bool      `bson:"join_leave"`
-	Webhooks  []Webhook `bson:"webhooks"`
-}
-
 type Webhook struct {
 	Url string `bson:"url"`
 
 	Channel     bool `bson:"channel"`
 	Presence    bool `bson:"presence"`
 	Publication bool `bson:"publication"`
+}
+
+type Options struct {
+	ClientPublications bool      `bson:"client_publications"`
+	JoinLeave          bool      `bson:"join_leave"`
+	Webhooks           []Webhook `bson:"webhooks"`
 }
 
 type App struct {

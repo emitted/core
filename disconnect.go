@@ -86,4 +86,10 @@ var (
 		Reason:    "force disconnect",
 		Reconnect: false,
 	}
+
+	DisconnectLimitExceeded = &Disconnect{
+		Code:      3013,
+		Reason:    "connections limit has been reached",
+		Reconnect: false,
+	}
 )
