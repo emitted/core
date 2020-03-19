@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"github.com/FZambia/eagle"
-	"github.com/centrifugal/centrifuge"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sireax/core/internal/proto/nodeproto"
 	"github.com/sireax/core/internal/uuid"
@@ -44,10 +43,6 @@ type NodeMetrics struct {
 const (
 	numSubLocks = 16384
 )
-
-func handleLog(e centrifuge.LogEntry) {
-	log.Printf("%s: %v", e.Message, e.Fields)
-}
 
 func (n *Node) NotifyShutdown() chan struct{} {
 	return n.shutdownCh
@@ -184,6 +179,10 @@ func (n *Node) Presence(ch string) (map[string][]byte, error) {
 
 func (n *Node) GetPresence(ch, uid string) ([]byte, error) {
 	return n.broker.GetPresence(ch, uid)
+}
+
+func (n *Node) UpdateAppStats(app string, stats AppStats) error {
+	return n.broker.UpdateStats(app, stats)
 }
 
 func (n *Node) pubNode() error {

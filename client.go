@@ -340,7 +340,7 @@ type replyWriter struct {
 
 func (c *Client) canConnect() bool {
 	c.mu.RLock()
-	can := c.app.Stats.Connections < c.app.MaxConnections
+	can := c.app.Stats.Connections < c.app.MaxConnections && !c.app.shutdown
 	c.mu.RUnlock()
 
 	return can

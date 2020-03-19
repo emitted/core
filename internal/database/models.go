@@ -25,6 +25,8 @@ type App struct {
 	MaxMessages    int `bson:"max_messages"`
 
 	Options Options `bson:"options"`
+
+	DueDate int64 `bson:"due_date"`
 }
 
 func (app *App) Validate() error {

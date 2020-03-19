@@ -16,15 +16,11 @@ type AppStats struct {
 }
 
 func (s *AppStats) getConns() int {
-	conns := s.Connections
-
-	return conns
+	return s.Connections
 }
 
 func (s *AppStats) getMsgs() int {
-	msgs := s.Messages
-
-	return msgs
+	return s.Messages
 }
 
 func (s *AppStats) IncrementConns() {
@@ -66,6 +62,10 @@ type App struct {
 	statsMu sync.Mutex
 
 	Stats AppStats
+
+	DueTime *time.Time
+
+	shutdown bool
 }
 
 func (app *App) CanHaveNewConns() bool {
@@ -76,6 +76,39 @@ func (app *App) CanHaveNewConns() bool {
 	return false
 }
 
+func (app *App) Shutdown() {
+	app.mu.Lock()
+	if app.shutdown {
+		app.mu.Unlock()
+		return
+	}
+	app.shutdown = true
+
+	channels := make(map[string]*Channel, len(app.Channels))
+
+	for name, channel := range app.Channels {
+		channels[name] = channel
+	}
+
+	app.mu.Unlock()
+
+	for name, channel := range channels {
+		chId := makeChId(app.Secret, name)
+		err := app.node.broker.Unsubscribe(chId)
+		if err != nil {
+			//	todo
+		}
+
+		for _, client := range channel.Clients {
+			client.Close(DisconnectNormal)
+		}
+	}
+
+}
+
+func (app *App) CheckDue() {
+
+}
 func GetApp(n *Node, secret string) (*App, error) {
 	app, ok := n.hub.apps[secret]
 	if !ok {
@@ -94,7 +127,6 @@ func GetApp(n *Node, secret string) (*App, error) {
 
 func NewApp(n *Node, dbApp database.App) *App {
 
-	n.logger.log(NewLogEntry(LogLevelDebug, "db app", map[string]interface{}{"db app": dbApp}))
 	app := &App{
 		ID:     dbApp.Id,
 		Secret: dbApp.Secret,
@@ -113,6 +145,8 @@ func NewApp(n *Node, dbApp database.App) *App {
 		},
 	}
 
+	app.node = n
+
 	go app.runSync()
 
 	return app
@@ -124,7 +158,10 @@ func (app *App) runSync() {
 	for {
 		select {
 		case <-ticker.C:
-			database.UpdateAppStats(app.Key, app.Stats.getConns(), app.Stats.getMsgs())
+			err := app.node.UpdateAppStats(app.Secret, app.Stats)
+			if err != nil {
+				app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"error": err.Error()}))
+			}
 		}
 	}
 

@@ -30,6 +30,12 @@ var (
 	presenceSource = `return redis.call("hgetall", KEYS[1])`
 
 	getPresenceSource = `return redis.call("hget", KEYS[1], ARGV[1])`
+
+	updateStatsSource = `
+redis.call("hset", KEYS[1], ARGV[1], ARGV[2])
+redis.call("hset", KEYS[1], ARGV[3], ARGV[4])
+redis.call("hset", KEYS[1], ARGV[5], ARGV[6])
+redis.call("hset", KEYS[1], ARGV[7], ARGV[8])`
 )
 
 type Broker struct {
@@ -57,6 +63,7 @@ type shard struct {
 	presenceScript    *redis.Script
 	addPresenceScript *redis.Script
 	remPresenceScript *redis.Script
+	updateStatsScript *redis.Script
 }
 
 type BrokerShardConfig struct {
@@ -156,6 +163,10 @@ func (b *Broker) GetPresence(ch, uid string) ([]byte, error) {
 	return b.getShard(ch).getPresence(ch, uid)
 }
 
+func (b *Broker) UpdateStats(appSec string, stats AppStats) error {
+	return b.getShard(appSec).updateStats(appSec, stats)
+}
+
 func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 	host := conf.Host
 	port := conf.Port
@@ -250,6 +261,10 @@ func (s *shard) presence(ch string) (map[string][]byte, error) {
 	return s.mapStringClientInfo(resp.reply, nil)
 }
 
+func (s *shard) statsHashKey(app string) string {
+	return "app.stats." + app
+}
+
 func (s *shard) getPresence(ch, uid string) ([]byte, error) {
 	hashKey := s.presenceHashKey(ch)
 
@@ -258,6 +273,15 @@ func (s *shard) getPresence(ch, uid string) ([]byte, error) {
 
 	s.node.logger.log(NewLogEntry(LogLevelDebug, "received presence data", map[string]interface{}{"response": resp.reply}))
 	return resp.reply.([]byte), resp.err
+}
+
+func (s *shard) updateStats(app string, stats AppStats) error {
+	hashKey := s.statsHashKey(app)
+
+	dr := newDataRequest(dataOpUpdateStats, []interface{}{hashKey, "connections", stats.Connections, "messages", stats.Messages, "joins", stats.Join, "leave", stats.Leave})
+	resp := s.getDataResponse(dr)
+
+	return resp.err
 }
 
 func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string][]byte, error) {
@@ -319,6 +343,7 @@ func newShard(n *Node, conf BrokerShardConfig) (*shard, error) {
 		getPresenceScript: redis.NewScript(1, getPresenceSource),
 		addPresenceScript: redis.NewScript(1, addPresenceSource),
 		remPresenceScript: redis.NewScript(1, remPresenceSource),
+		updateStatsScript: redis.NewScript(1, updateStatsSource),
 	}
 	return shard, nil
 }
@@ -396,6 +421,33 @@ func (s *shard) runPublishPipeline() {
 		}
 	}
 
+}
+
+func (s *shard) Channels(app string) ([]string, error) {
+
+	dr := newDataRequest(dataOpChannels, []interface{}{"CHANNELS", "*"})
+	resp := s.getDataResponse(dr)
+
+	if resp.err != nil {
+		return nil, resp.err
+	}
+
+	values, err := redis.Values(resp.reply, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	channels := make([]string, 0, len(values))
+	for i := 0; i < len(values); i++ {
+		value, okValue := values[i].([]byte)
+		if !okValue {
+			return nil, errors.New("error getting ChannelID value")
+		}
+
+		channels = append(channels, string(value))
+	}
+
+	return channels, nil
 }
 
 func (s *shard) runPubSub() {
@@ -640,6 +692,13 @@ func (s *shard) RunDataPipeline() {
 		return
 	}
 
+	err = s.updateStatsScript.Load(conn)
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error loading update stats script", map[string]interface{}{"error": err}))
+		conn.Close()
+		return
+	}
+
 	conn.Close()
 
 	var drs []dataRequest
@@ -661,14 +720,32 @@ func (s *shard) RunDataPipeline() {
 		for i := range drs {
 			switch drs[i].op {
 			case dataOpAddPresence:
-				s.addPresenceScript.SendHash(conn, drs[i].args...)
+				err := s.addPresenceScript.SendHash(conn, drs[i].args...)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "add presence", "error": err.Error()}))
+				}
 			case dataOpRemovePresence:
-				s.remPresenceScript.SendHash(conn, drs[i].args...)
+				err := s.remPresenceScript.SendHash(conn, drs[i].args...)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "remove presence", "error": err.Error()}))
+				}
 			case dataOpPresence:
-				s.presenceScript.SendHash(conn, drs[i].args...)
+				err := s.presenceScript.SendHash(conn, drs[i].args...)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "presence", "error": err.Error()}))
+				}
 			case dataOpGetPresence:
-				s.getPresenceScript.SendHash(conn, drs[i].args...)
+				err := s.getPresenceScript.SendHash(conn, drs[i].args...)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "get presence", "error": err.Error()}))
+				}
 			case dataOpChannels:
+				conn.Send("PUBSUB", drs[i].args...)
+			case dataOpUpdateStats:
+				err := s.updateStatsScript.SendHash(conn, drs[i].args...)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
+				}
 			}
 		}
 
@@ -977,6 +1054,7 @@ const (
 	dataOpPresence
 	dataOpGetPresence
 	dataOpChannels
+	dataOpUpdateStats
 )
 
 type dataResponse struct {
