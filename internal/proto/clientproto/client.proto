@@ -40,28 +40,33 @@ message Push {
     bytes data = 2;
 }
 
+message ClientInfo {
+    string id = 1;
+    bytes data = 2;
+}
+
 message Publication {
     string topic = 1;
     string channel = 2;
     bytes data = 3;
-    bytes info = 4;
+    ClientInfo info = 4;
 }
 
 message Join {
     string channel = 1;
-    bytes info = 3;
+    ClientInfo data = 2;
 }
 
 message Leave {
     string channel = 1;
-    bytes info = 3;
+    ClientInfo data = 2;
 }
 
 
 message SubscribeRequest {
     string channel = 1;
     string signature = 2;
-    bytes data = 3;
+    ClientInfo data = 3;
 }
 
 message UnsubscribeRequest {
@@ -112,5 +117,5 @@ message PresenceRequest {
 }
 
 message PresenceResult {
-    map<string, bytes> presence = 1;
+    map<string, ClientInfo> presence = 1;
 }

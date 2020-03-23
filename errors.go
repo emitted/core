@@ -1,6 +1,9 @@
 package core
 
-import "github.com/sireax/core/internal/proto/clientproto"
+import (
+	"errors"
+	"github.com/sireax/core/internal/proto/clientproto"
+)
 
 var (
 	ErrorInternal = &clientproto.Error{
@@ -65,3 +68,5 @@ var (
 		Message: "trying to get presence on non-presence channel",
 	}
 )
+
+var RedisWriteTimeoutError = errors.New("redis write timeout")

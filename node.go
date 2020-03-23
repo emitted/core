@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/FZambia/eagle"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sireax/core/internal/proto/clientproto"
 	"github.com/sireax/core/internal/proto/nodeproto"
 	"github.com/sireax/core/internal/uuid"
 	"log"
@@ -165,7 +166,11 @@ func (n *Node) initMetrics() error {
 	return nil
 }
 
-func (n *Node) AddPresence(ch, uid string, clientInfo []byte) error {
+func (n *Node) Publish(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.PublishRequest) error {
+	return n.broker.Publish(chId, clientInfo, r)
+}
+
+func (n *Node) AddPresence(ch, uid string, clientInfo *clientproto.ClientInfo) error {
 	return n.broker.AddPresence(ch, uid, clientInfo)
 }
 
@@ -173,16 +178,20 @@ func (n *Node) RemovePresence(ch, uid string) error {
 	return n.broker.RemovePresence(ch, uid)
 }
 
-func (n *Node) Presence(ch string) (map[string][]byte, error) {
+func (n *Node) Presence(ch string) (map[string]*clientproto.ClientInfo, error) {
 	return n.broker.Presence(ch)
 }
 
-func (n *Node) GetPresence(ch, uid string) ([]byte, error) {
+func (n *Node) GetPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return n.broker.GetPresence(ch, uid)
 }
 
 func (n *Node) UpdateAppStats(app string, stats AppStats) error {
 	return n.broker.UpdateStats(app, stats)
+}
+
+func (n *Node) Channels(appSec string) ([]string, error) {
+	return n.broker.Channels(appSec)
 }
 
 func (n *Node) pubNode() error {

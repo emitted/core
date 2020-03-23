@@ -5,8 +5,8 @@ import (
 
 	"context"
 	"github.com/sireax/core/internal/proto/clientproto"
-	"github.com/sireax/core/internal/proto/internalproto"
 	"github.com/sireax/core/internal/uuid"
+	"io"
 	"sync"
 	"time"
 )
@@ -84,7 +84,7 @@ func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, er
 	return client, nil
 }
 
-func (c *Client) clientInfo(ch string) []byte {
+func (c *Client) clientInfo(ch string) *clientproto.ClientInfo {
 	chId := makeChId(c.app.Secret, ch)
 
 	info, err := c.node.GetPresence(chId, c.uid)
@@ -191,17 +191,15 @@ func (c *Client) unsubscribeForce(ch string) {
 			return
 		}
 
-		leave := &internalproto.Leave{
+		clientInfo := c.clientInfo(ch)
+		leave := &clientproto.Leave{
 			Channel: ch,
-			Uid:     c.uid,
+			Data:    clientInfo,
 		}
 
 		c.mu.RLock()
 		uid := c.uid
 		c.mu.RUnlock()
-
-		clientInfo := c.clientInfo(ch)
-		leave.ClientInfo = clientInfo
 
 		switch getChannelType(ch) {
 		case "private":
@@ -310,32 +308,70 @@ func (c *Client) Handle(data []byte) {
 		return
 	}
 
-	decoder := clientproto.NewProtobufCommandDecoder(data)
-	cmd, err := decoder.Decode()
-	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "empty clientproto request recieved", map[string]interface{}{"clientproto": c.uid}))
-	}
+	encoder := clientproto.GetReplyEncoder()
+	decoder := clientproto.GetCommandDecoder(data)
 
-	disconnect := c.HandleCommand(cmd)
+	for {
+		cmd, err := decoder.Decode()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			c.node.logger.log(NewLogEntry(LogLevelInfo, "empty clientproto request recieved", map[string]interface{}{"clientproto": c.uid}))
+			return
+		}
+		write := func(rep *clientproto.Reply) error {
+			rep.Id = 6346
+			data, err := rep.Marshal()
+			if err != nil {
+				c.node.logger.log(NewLogEntry(LogLevelError, "error marshaling reply", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
+				return err
+			}
 
-	select {
-	case <-c.ctx.Done():
-		return
-	default:
+			c.messageWriter.enqueue(data)
 
-	}
+			return nil
+		}
+		flush := func() error {
+			buf := encoder.Finish()
+			if len(buf) > 0 {
+				c.messageWriter.enqueue(buf)
+			}
+			encoder.Reset()
+			return nil
+		}
+		disconnect := c.HandleCommand(cmd, write, flush)
 
-	if disconnect != nil {
-		if disconnect != DisconnectNormal {
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
 
 		}
-		c.Close(disconnect)
+
+		if disconnect != nil {
+			if disconnect != DisconnectNormal {
+
+			}
+			c.Close(disconnect)
+		}
 	}
+
+	buf := encoder.Finish()
+	if len(buf) > 0 {
+		c.messageWriter.enqueue(buf)
+	}
+
+	clientproto.PutCommandDecoder(decoder)
+	clientproto.PutReplyEncoder(encoder)
+
+	return
 
 }
 
 type replyWriter struct {
 	write func(*clientproto.Reply) error
+	flush func() error
 }
 
 func (c *Client) canConnect() bool {
@@ -354,7 +390,7 @@ func (c *Client) canPublish() bool {
 	return can
 }
 
-func (c *Client) HandleCommand(cmd *clientproto.Command) *Disconnect {
+func (c *Client) HandleCommand(cmd *clientproto.Command, write func(reply *clientproto.Reply) error, flush func() error) *Disconnect {
 
 	c.mu.Lock()
 	if c.closed {
@@ -365,20 +401,7 @@ func (c *Client) HandleCommand(cmd *clientproto.Command) *Disconnect {
 
 	var disconnect *Disconnect
 
-	write := func(rep *clientproto.Reply) error {
-		rep.Id = 6346
-		data, err := rep.Marshal()
-		if err != nil {
-			c.node.logger.log(NewLogEntry(LogLevelError, "error marshaling reply", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
-			return err
-		}
-
-		c.messageWriter.enqueue(data)
-
-		return nil
-	}
-
-	rw := &replyWriter{write}
+	rw := &replyWriter{write, flush}
 
 	switch cmd.Type {
 	case clientproto.MethodType_CONNECT:
@@ -487,6 +510,7 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 
 func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
+	c.node.logger.log(NewLogEntry(LogLevelError, "ENTERING SUBSCRIBE"))
 	c.mu.RLock()
 	if !c.authenticated {
 		c.mu.RUnlock()
@@ -547,7 +571,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	uid := c.uid
 	c.mu.RUnlock()
 
-	var clientInfo []byte
+	var clientInfo clientproto.ClientInfo
 
 	switch getChannelType(p.Channel) {
 	case "private":
@@ -567,20 +591,22 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	case "presence":
 
-		signature := generateSignature(appSec, appKey, uid, p.Channel)
+		//signature := generateSignature(appSec, appKey, uid, p.Channel)
+		//
+		//ok := verifySignature(signature, p.Signature)
+		//if !ok {
+		//	err := rw.write(&clientproto.Reply{
+		//		Error: ErrorInvalidSignature,
+		//	})
+		//	if err != nil {
+		//		return DisconnectWriteError
+		//	}
+		//	return nil
+		//}
 
-		ok := verifySignature(signature, p.Signature)
-		if !ok {
-			err := rw.write(&clientproto.Reply{
-				Error: ErrorInvalidSignature,
-			})
-			if err != nil {
-				return DisconnectWriteError
-			}
-			return nil
-		}
+		c.node.logger.log(NewLogEntry(LogLevelDebug, "presence from client", map[string]interface{}{"presence": p.Data}))
 
-		clientInfo = p.Data
+		clientInfo = *p.Data
 
 	default:
 	}
@@ -589,8 +615,8 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	first := c.app.addSub(p.Channel, c)
 
-	if len(clientInfo) > 0 {
-		err := c.node.AddPresence(chId, c.uid, clientInfo)
+	if len(clientInfo.Data) > 0 {
+		err := c.node.AddPresence(chId, c.uid, &clientInfo)
 		if err != nil {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error adding presence", map[string]interface{}{"error": err.Error()}))
 		}
@@ -606,7 +632,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	if c.app.Options.JoinLeave {
-		err = c.node.broker.HandleSubscribe(chId, c.uid, clientInfo, p)
+		err = c.node.broker.HandleSubscribe(chId, c.uid, &clientInfo, p)
 		if err != nil {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling subscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
 		}
@@ -772,12 +798,11 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 	clientInfo := c.clientInfo(p.Channel)
 
 	c.mu.RLock()
-	uid := c.uid
 	appSec := c.app.Secret
 	c.mu.RUnlock()
 
 	chId := makeChId(appSec, p.Channel)
-	err = c.node.broker.Publish(chId, uid, clientInfo, p)
+	err = c.node.broker.Publish(chId, clientInfo, p)
 	if err != nil {
 		c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling publication", map[string]interface{}{"channelID": chId, "clientproto": c.uid, "error": err.Error()}))
 	}

@@ -3,7 +3,6 @@ package core
 import (
 	"errors"
 	"github.com/sireax/core/internal/proto/clientproto"
-	"github.com/sireax/core/internal/proto/internalproto"
 	"github.com/sireax/core/internal/timers"
 	"log"
 	"net"
@@ -36,6 +35,12 @@ redis.call("hset", KEYS[1], ARGV[1], ARGV[2])
 redis.call("hset", KEYS[1], ARGV[3], ARGV[4])
 redis.call("hset", KEYS[1], ARGV[5], ARGV[6])
 redis.call("hset", KEYS[1], ARGV[7], ARGV[8])`
+
+	channelsSource = `return redis.call("lrange", KEYS[1], 0, 200`
+
+	addChannelSource = `return redis.call("lpush", KEYS[1], ARGV[1])`
+
+	remChannelSource = `return redis.call("lrem", KEYS[1], 1, ARGV[1])`
 )
 
 type Broker struct {
@@ -64,6 +69,9 @@ type shard struct {
 	addPresenceScript *redis.Script
 	remPresenceScript *redis.Script
 	updateStatsScript *redis.Script
+	channelsScript    *redis.Script
+	addChannelScript  *redis.Script
+	remChannelScript  *redis.Script
 }
 
 type BrokerShardConfig struct {
@@ -127,27 +135,27 @@ func (b *Broker) Unsubscribe(chId string) error {
 	return b.getShard(chId).Unsubscribe([]string{chId})
 }
 
-func (b *Broker) Publish(chId string, uid string, clientInfo []byte, p *clientproto.PublishRequest) error {
-	return b.getShard(chId).handlePublish(chId, uid, clientInfo, p)
+func (b *Broker) Publish(chId string, clientInfo *clientproto.ClientInfo, p *clientproto.PublishRequest) error {
+	return b.getShard(chId).handlePublish(chId, clientInfo, p)
 }
 
-func (b *Broker) HandleSubscribe(chId string, uid string, clientInfo []byte, r *clientproto.SubscribeRequest) error {
+func (b *Broker) HandleSubscribe(chId string, uid string, clientInfo *clientproto.ClientInfo, r *clientproto.SubscribeRequest) error {
 	return b.getShard(chId).handleSubscribe(chId, uid, clientInfo, r)
 }
 
-func (b *Broker) HandleUnsubscribe(chId string, uid string, clientInfo []byte, r *clientproto.UnsubscribeRequest) error {
+func (b *Broker) HandleUnsubscribe(chId string, uid string, clientInfo *clientproto.ClientInfo, r *clientproto.UnsubscribeRequest) error {
 	return b.getShard(chId).handleUnsubscribe(chId, uid, clientInfo, r)
 }
 
-func (b *Broker) PublishJoin(chId string, join *internalproto.Join) error {
+func (b *Broker) PublishJoin(chId string, join *clientproto.Join) error {
 	return b.getShard(chId).PublishJoin(chId, join)
 }
 
-func (b *Broker) PublishLeave(chId string, leave *internalproto.Leave) error {
+func (b *Broker) PublishLeave(chId string, leave *clientproto.Leave) error {
 	return b.getShard(chId).PublishLeave(chId, leave)
 }
 
-func (b *Broker) AddPresence(ch string, uid string, clientInfo []byte) error {
+func (b *Broker) AddPresence(ch string, uid string, clientInfo *clientproto.ClientInfo) error {
 	return b.getShard(ch).addPresence(ch, uid, clientInfo)
 }
 
@@ -155,16 +163,28 @@ func (b *Broker) RemovePresence(ch, uid string) error {
 	return b.getShard(ch).removePresence(ch, uid)
 }
 
-func (b *Broker) Presence(ch string) (map[string][]byte, error) {
+func (b *Broker) Presence(ch string) (map[string]*clientproto.ClientInfo, error) {
 	return b.getShard(ch).presence(ch)
 }
 
-func (b *Broker) GetPresence(ch, uid string) ([]byte, error) {
+func (b *Broker) GetPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return b.getShard(ch).getPresence(ch, uid)
 }
 
 func (b *Broker) UpdateStats(appSec string, stats AppStats) error {
 	return b.getShard(appSec).updateStats(appSec, stats)
+}
+
+func (b *Broker) Channels(appSec string) ([]string, error) {
+	return b.getShard(appSec).Channels(appSec)
+}
+
+func (b *Broker) addChannel(secret, channel string) error {
+	return b.getShard(secret).addChannel(secret, channel)
+}
+
+func (b *Broker) remChannel(secret, channel string) error {
+	return b.getShard(secret).remChannel(secret, channel)
 }
 
 func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
@@ -234,10 +254,14 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 	}
 }
 
-func (s *shard) addPresence(ch, uid string, clientInfo []byte) error {
+func (s *shard) addPresence(ch, uid string, clientInfo *clientproto.ClientInfo) error {
+	cInfoBytes, err := clientInfo.Marshal()
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error marshaling client info", map[string]interface{}{"error": err.Error()}))
+	}
 	hashKey := s.presenceHashKey(ch)
 
-	dr := newDataRequest(dataOpAddPresence, []interface{}{hashKey, uid, clientInfo})
+	dr := newDataRequest(dataOpAddPresence, []interface{}{hashKey, uid, cInfoBytes})
 	resp := s.getDataResponse(dr)
 
 	return resp.err
@@ -252,7 +276,7 @@ func (s *shard) removePresence(ch, uid string) error {
 	return resp.err
 }
 
-func (s *shard) presence(ch string) (map[string][]byte, error) {
+func (s *shard) presence(ch string) (map[string]*clientproto.ClientInfo, error) {
 	hashKey := s.presenceHashKey(ch)
 
 	dr := newDataRequest(dataOpPresence, []interface{}{hashKey})
@@ -265,14 +289,21 @@ func (s *shard) statsHashKey(app string) string {
 	return "app.stats." + app
 }
 
-func (s *shard) getPresence(ch, uid string) ([]byte, error) {
+func (s *shard) getPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	hashKey := s.presenceHashKey(ch)
 
 	dr := newDataRequest(dataOpGetPresence, []interface{}{hashKey, uid})
 	resp := s.getDataResponse(dr)
 
 	s.node.logger.log(NewLogEntry(LogLevelDebug, "received presence data", map[string]interface{}{"response": resp.reply}))
-	return resp.reply.([]byte), resp.err
+
+	var clientInfo clientproto.ClientInfo
+	err := clientInfo.Unmarshal(resp.reply.([]byte))
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling client info", map[string]interface{}{"error": err.Error()}))
+	}
+
+	return &clientInfo, resp.err
 }
 
 func (s *shard) updateStats(app string, stats AppStats) error {
@@ -284,7 +315,25 @@ func (s *shard) updateStats(app string, stats AppStats) error {
 	return resp.err
 }
 
-func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string][]byte, error) {
+func (s *shard) addChannel(secret, channel string) error {
+	hashKey := s.statsHashKey(secret)
+
+	dr := newDataRequest(dataOpAddChannel, []interface{}{hashKey, channel})
+	resp := s.getDataResponse(dr)
+
+	return resp.err
+}
+
+func (s *shard) remChannel(secret, channel string) error {
+	hashKey := s.statsHashKey(secret)
+
+	dr := newDataRequest(dataOpRemChannel, []interface{}{hashKey, channel})
+	resp := s.getDataResponse(dr)
+
+	return resp.err
+}
+
+func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string]*clientproto.ClientInfo, error) {
 	values, err := redis.Values(reply, err)
 
 	if err != nil {
@@ -294,7 +343,7 @@ func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string][]
 		return nil, errors.New("mapStringClientInfo expects even number of values result")
 	}
 
-	m := make(map[string][]byte, len(values))
+	m := make(map[string]*clientproto.ClientInfo, len(values))
 
 	for i := 0; i < len(values); i += 2 {
 		key, okKey := values[i].([]byte)
@@ -303,7 +352,10 @@ func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string][]
 			return nil, errors.New("scanMap key not a bulk string value")
 		}
 
-		m[string(key)] = value
+		var clientInfo clientproto.ClientInfo
+		clientInfo.Unmarshal(value)
+
+		m[string(key)] = &clientInfo
 	}
 
 	return m, nil
@@ -344,6 +396,9 @@ func newShard(n *Node, conf BrokerShardConfig) (*shard, error) {
 		addPresenceScript: redis.NewScript(1, addPresenceSource),
 		remPresenceScript: redis.NewScript(1, remPresenceSource),
 		updateStatsScript: redis.NewScript(1, updateStatsSource),
+		channelsScript:    redis.NewScript(1, channelsSource),
+		addChannelScript:  redis.NewScript(1, addChannelSource),
+		remChannelScript:  redis.NewScript(1, remChannelSource),
 	}
 	return shard, nil
 }
@@ -437,6 +492,7 @@ func (s *shard) Channels(app string) ([]string, error) {
 		return nil, err
 	}
 
+	s.node.logger.log(NewLogEntry(LogLevelDebug, "got values", map[string]interface{}{"values": values}))
 	channels := make([]string, 0, len(values))
 	for i := 0; i < len(values); i++ {
 		value, okValue := values[i].([]byte)
@@ -569,39 +625,39 @@ func (s *shard) runPubSub() {
 					case "ping":
 					default:
 
-						var packet internalproto.Packet
-						err := packet.Unmarshal(message.Data)
+						var push clientproto.Push
+						err := push.Unmarshal(message.Data)
 						if err != nil {
 							s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling push from msg broker", map[string]interface{}{"channel": message.Channel, "error": err.Error()}))
 						}
 
 						appKey, channelName := parseChId(message.Channel)
 
-						switch packet.Type {
-						case internalproto.PacketType_PUBLICATION:
+						switch push.Type {
+						case clientproto.PushType_PUBLICATION:
 
-							var pub internalproto.Publication
-							err := pub.Unmarshal(packet.Data)
+							var pub clientproto.Publication
+							err := pub.Unmarshal(push.Data)
 							if err != nil {
 								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling publication from msg broker", map[string]interface{}{"channel": message.Channel, "error": err.Error()}))
 							}
 
 							s.node.hub.BroadcastPublication(appKey, channelName, &pub)
 
-						case internalproto.PacketType_JOIN:
+						case clientproto.PushType_JOIN:
 
-							var join internalproto.Join
-							err := join.Unmarshal(packet.Data)
+							var join clientproto.Join
+							err := join.Unmarshal(push.Data)
 							if err != nil {
 								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling join from msg broker", map[string]interface{}{"channel": message.Channel, "error": err.Error()}))
 							}
 
 							s.node.hub.BroadcastJoin(appKey, &join)
 
-						case internalproto.PacketType_LEAVE:
+						case clientproto.PushType_LEAVE:
 
-							var leave internalproto.Leave
-							err := leave.Unmarshal(packet.Data)
+							var leave clientproto.Leave
+							err := leave.Unmarshal(push.Data)
 							if err != nil {
 								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling leave from msg broker", map[string]interface{}{"channel": message.Channel, "error": err.Error()}))
 							}
@@ -699,6 +755,27 @@ func (s *shard) RunDataPipeline() {
 		return
 	}
 
+	err = s.channelsScript.Load(conn)
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error loading channels script", map[string]interface{}{"error": err}))
+		conn.Close()
+		return
+	}
+
+	err = s.addChannelScript.Load(conn)
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error loading add channel script", map[string]interface{}{"error": err}))
+		conn.Close()
+		return
+	}
+
+	err = s.remChannelScript.Load(conn)
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error loading remove channel script", map[string]interface{}{"error": err}))
+		conn.Close()
+		return
+	}
+
 	conn.Close()
 
 	var drs []dataRequest
@@ -720,6 +797,7 @@ func (s *shard) RunDataPipeline() {
 		for i := range drs {
 			switch drs[i].op {
 			case dataOpAddPresence:
+				s.node.logger.log(NewLogEntry(LogLevelDebug, "sending add presence", map[string]interface{}{"args": drs[i].args}))
 				err := s.addPresenceScript.SendHash(conn, drs[i].args...)
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "add presence", "error": err.Error()}))
@@ -761,7 +839,6 @@ func (s *shard) RunDataPipeline() {
 		var noScriptError bool
 		for i := range drs {
 			reply, err := conn.Receive()
-			s.node.logger.log(NewLogEntry(LogLevelDebug, "received reply", map[string]interface{}{"reply": reply}))
 			if err != nil {
 				if e, ok := err.(redis.Error); ok && strings.HasPrefix(string(e), "NOSCRIPT ") {
 					noScriptError = true
@@ -791,36 +868,33 @@ func (s *shard) Unsubscribe(channels []string) error {
 	return s.sendSubRequest(sub)
 }
 
-func (s *shard) handlePublish(chId string, uid string, clientInfo []byte, r *clientproto.PublishRequest) error {
+func (s *shard) handlePublish(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.PublishRequest) error {
 
-	pub := &internalproto.Publication{
-		Uid:        uid,
-		Channel:    r.Channel,
-		Data:       r.Data,
-		ClientInfo: clientInfo,
+	pub := &clientproto.Publication{
+		Channel: r.Channel,
+		Data:    r.Data,
+		Info:    clientInfo,
 	}
 
 	return s.Publish(chId, pub)
 
 }
 
-func (s *shard) handleSubscribe(chId string, uid string, clientInfo []byte, r *clientproto.SubscribeRequest) error {
+func (s *shard) handleSubscribe(chId string, uid string, clientInfo *clientproto.ClientInfo, r *clientproto.SubscribeRequest) error {
 
-	join := &internalproto.Join{
-		Channel:    r.Channel,
-		Uid:        uid,
-		ClientInfo: clientInfo,
+	join := &clientproto.Join{
+		Channel: r.Channel,
+		Data:    clientInfo,
 	}
 
 	return s.PublishJoin(chId, join)
 }
 
-func (s *shard) handleUnsubscribe(chId string, uid string, clientInfo []byte, r *clientproto.UnsubscribeRequest) error {
+func (s *shard) handleUnsubscribe(chId string, uid string, clientInfo *clientproto.ClientInfo, r *clientproto.UnsubscribeRequest) error {
 
-	leave := &internalproto.Leave{
-		Channel:    r.Channel,
-		Uid:        uid,
-		ClientInfo: clientInfo,
+	leave := &clientproto.Leave{
+		Channel: r.Channel,
+		Data:    clientInfo,
 	}
 
 	return s.PublishLeave(chId, leave)
@@ -834,7 +908,7 @@ func (s *shard) handleUnsubscribe(chId string, uid string, clientInfo []byte, r 
 |
 */
 
-func (s *shard) Publish(chId string, publication *internalproto.Publication) error {
+func (s *shard) Publish(chId string, publication *clientproto.Publication) error {
 	eChan := make(chan error, 1)
 
 	bytes, err := publication.Marshal()
@@ -842,8 +916,8 @@ func (s *shard) Publish(chId string, publication *internalproto.Publication) err
 		return err
 	}
 
-	packet := &internalproto.Packet{
-		Type: internalproto.PacketType_PUBLICATION,
+	packet := &clientproto.Push{
+		Type: clientproto.PushType_PUBLICATION,
 		Data: bytes,
 	}
 
@@ -866,14 +940,14 @@ func (s *shard) Publish(chId string, publication *internalproto.Publication) err
 		select {
 		case s.pubMessages <- pr:
 		case <-timer.C:
-			return errors.New("redis timeout")
+			return RedisWriteTimeoutError
 		}
 	}
 
 	return <-eChan
 }
 
-func (s *shard) PublishJoin(chId string, join *internalproto.Join) error {
+func (s *shard) PublishJoin(chId string, join *clientproto.Join) error {
 	eChan := make(chan error, 1)
 
 	bytes, err := join.Marshal()
@@ -881,8 +955,8 @@ func (s *shard) PublishJoin(chId string, join *internalproto.Join) error {
 		return err
 	}
 
-	packet := &internalproto.Packet{
-		Type: internalproto.PacketType_JOIN,
+	packet := &clientproto.Push{
+		Type: clientproto.PushType_JOIN,
 		Data: bytes,
 	}
 
@@ -905,14 +979,14 @@ func (s *shard) PublishJoin(chId string, join *internalproto.Join) error {
 		select {
 		case s.pubMessages <- pr:
 		case <-timer.C:
-			return errors.New("redis timeout")
+			return RedisWriteTimeoutError
 		}
 	}
 
 	return <-eChan
 }
 
-func (s *shard) PublishLeave(chId string, leave *internalproto.Leave) error {
+func (s *shard) PublishLeave(chId string, leave *clientproto.Leave) error {
 	eChan := make(chan error, 1)
 
 	bytes, err := leave.Marshal()
@@ -920,8 +994,8 @@ func (s *shard) PublishLeave(chId string, leave *internalproto.Leave) error {
 		return err
 	}
 
-	packet := &internalproto.Packet{
-		Type: internalproto.PacketType_LEAVE,
+	packet := &clientproto.Push{
+		Type: clientproto.PushType_LEAVE,
 		Data: bytes,
 	}
 
@@ -964,7 +1038,7 @@ func (s *shard) PublishNode(data []byte) error {
 		select {
 		case s.pubMessages <- pr:
 		case <-timer.C:
-			return errors.New("redis timeout reached")
+			return RedisWriteTimeoutError
 		}
 	}
 
@@ -1002,7 +1076,7 @@ func (s *shard) sendPubRequest(pub pubRequest) error {
 		select {
 		case s.pubMessages <- pub:
 		case <-timer.C:
-			return errors.New("redis timeout")
+			return RedisWriteTimeoutError
 		}
 	}
 
@@ -1032,7 +1106,7 @@ func (s *shard) sendSubRequest(sub subRequest) error {
 		select {
 		case s.subCh <- sub:
 		case <-timer.C:
-			return errors.New("redis timeout")
+			return RedisWriteTimeoutError
 		}
 	}
 	return sub.result()
@@ -1053,8 +1127,10 @@ const (
 	dataOpRemovePresence
 	dataOpPresence
 	dataOpGetPresence
-	dataOpChannels
 	dataOpUpdateStats
+	dataOpChannels
+	dataOpAddChannel
+	dataOpRemChannel
 )
 
 type dataResponse struct {

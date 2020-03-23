@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"github.com/sireax/core/internal/proto/clientproto"
-	"github.com/sireax/core/internal/proto/internalproto"
 	"github.com/sireax/core/internal/proto/webhooks"
 	"log"
 	"sync"
@@ -36,7 +35,7 @@ func (h *Hub) AddApp(app *App) {
 	h.mu.RUnlock()
 }
 
-func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *internalproto.Publication) {
+func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clientproto.Publication) {
 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -47,13 +46,7 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *inter
 		return
 	}
 
-	publication := clientproto.Publication{
-		Topic: pub.Topic,
-		Data:  pub.Data,
-		Info:  pub.ClientInfo,
-	}
-
-	data, err := publication.Marshal()
+	data, err := pub.Marshal()
 	if err != nil {
 		log.Fatal(err)
 		//	todo
@@ -81,9 +74,7 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *inter
 
 		pubWh := webhooks.Publication{
 			Channel: channelName,
-			Uid:     pub.Uid,
-			Data:    nil,
-			Info:    pub.ClientInfo,
+			Data:    pub.Data,
 		}
 		pubWhBytes, _ := pubWh.Marshal()
 
@@ -116,7 +107,7 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *inter
 
 }
 
-func (h *Hub) BroadcastJoin(appKey string, jn *internalproto.Join) {
+func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -124,11 +115,6 @@ func (h *Hub) BroadcastJoin(appKey string, jn *internalproto.Join) {
 	if !ok {
 		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting join", map[string]interface{}{"error": "app is not found"}))
 		return
-	}
-
-	join := clientproto.Join{
-		Channel: jn.Channel,
-		Info:    jn.ClientInfo,
 	}
 
 	data, err := join.Marshal()
@@ -165,10 +151,9 @@ func (h *Hub) BroadcastJoin(appKey string, jn *internalproto.Join) {
 
 	go func() {
 		joinWh := webhooks.PresenceAdded{
-			Channel: jn.Channel,
-			Uid:     jn.Uid,
-			Info:    jn.ClientInfo,
+			Channel: join.Channel,
 		}
+
 		joinWhData, _ := joinWh.Marshal()
 
 		for _, webhook := range app.Options.Webhooks {
@@ -197,7 +182,7 @@ func (h *Hub) BroadcastJoin(appKey string, jn *internalproto.Join) {
 	}()
 }
 
-func (h *Hub) BroadcastLeave(appKey string, lv *internalproto.Leave) {
+func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -205,12 +190,6 @@ func (h *Hub) BroadcastLeave(appKey string, lv *internalproto.Leave) {
 	if !ok {
 		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting leave", map[string]interface{}{"error": "app is not found"}))
 		return
-	}
-
-	clientInfo := lv.ClientInfo
-	leave := clientproto.Leave{
-		Channel: lv.Channel,
-		Info:    clientInfo,
 	}
 
 	data, err := leave.Marshal()
@@ -247,9 +226,7 @@ func (h *Hub) BroadcastLeave(appKey string, lv *internalproto.Leave) {
 
 	go func() {
 		leaveWh := webhooks.PresenceRemoved{
-			Channel: lv.Channel,
-			Uid:     lv.Uid,
-			Info:    lv.ClientInfo,
+			Channel: leave.Channel,
 		}
 
 		leaveWhData, _ := leaveWh.Marshal()
