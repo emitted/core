@@ -539,7 +539,9 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return nil
 	}
 
-	if p.Channel == "" {
+	channel := p.Channel
+
+	if channel == "" {
 		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
 		})
@@ -573,10 +575,10 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	var clientInfo clientproto.ClientInfo
 
-	switch getChannelType(p.Channel) {
+	switch getChannelType(channel) {
 	case "private":
 
-		signature := generateSignature(appSec, appKey, uid, p.Channel)
+		signature := generateSignature(appSec, appKey, uid, channel)
 
 		ok := verifySignature(signature, p.Signature)
 		if !ok {
@@ -625,7 +627,11 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	c.Subscribe(p.Channel)
 
 	if first {
-		err := c.node.broker.Subscribe(chId)
+		err := c.node.broker.AddChannel(appSec, p.Channel)
+		if err != nil {
+
+		}
+		err = c.node.broker.Subscribe(chId)
 		if err != nil {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error subscribing broker to channel", map[string]interface{}{"channelID": chId, "clientproto": c.uid, "error": err.Error()}))
 		}
@@ -731,7 +737,14 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling unsubscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
 		}
 	} else {
-		c.node.broker.Unsubscribe(chId)
+		err := c.node.broker.RemChannel(appSec, p.Channel)
+		if err != nil {
+			c.node.logger.log(NewLogEntry(LogLevelError, "error deleting channel from redis", map[string]interface{}{"error": err.Error()}))
+		}
+		err = c.node.broker.Unsubscribe(chId)
+		if err != nil {
+			c.node.logger.log(NewLogEntry(LogLevelError, "error unsubscribing from channel", map[string]interface{}{"error": err.Error()}))
+		}
 	}
 
 	c.Unsubscribe(p.Channel)

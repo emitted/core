@@ -36,7 +36,7 @@ redis.call("hset", KEYS[1], ARGV[3], ARGV[4])
 redis.call("hset", KEYS[1], ARGV[5], ARGV[6])
 redis.call("hset", KEYS[1], ARGV[7], ARGV[8])`
 
-	channelsSource = `return redis.call("lrange", KEYS[1], 0, 200`
+	channelsSource = `return redis.call("lrange", KEYS[1], 0, 200)`
 
 	addChannelSource = `return redis.call("lpush", KEYS[1], ARGV[1])`
 
@@ -179,11 +179,11 @@ func (b *Broker) Channels(appSec string) ([]string, error) {
 	return b.getShard(appSec).Channels(appSec)
 }
 
-func (b *Broker) addChannel(secret, channel string) error {
+func (b *Broker) AddChannel(secret, channel string) error {
 	return b.getShard(secret).addChannel(secret, channel)
 }
 
-func (b *Broker) remChannel(secret, channel string) error {
+func (b *Broker) RemChannel(secret, channel string) error {
 	return b.getShard(secret).remChannel(secret, channel)
 }
 
@@ -254,6 +254,18 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 	}
 }
 
+func (s *shard) presenceHashKey(ch string) string {
+	return "client.presence.data." + ch
+}
+
+func (s *shard) statsHashKey(secret string) string {
+	return "app.stats." + secret
+}
+
+func (s *shard) channelsHashKey(secret string) string {
+	return "app.channels." + secret
+}
+
 func (s *shard) addPresence(ch, uid string, clientInfo *clientproto.ClientInfo) error {
 	cInfoBytes, err := clientInfo.Marshal()
 	if err != nil {
@@ -285,10 +297,6 @@ func (s *shard) presence(ch string) (map[string]*clientproto.ClientInfo, error) 
 	return s.mapStringClientInfo(resp.reply, nil)
 }
 
-func (s *shard) statsHashKey(app string) string {
-	return "app.stats." + app
-}
-
 func (s *shard) getPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	hashKey := s.presenceHashKey(ch)
 
@@ -316,7 +324,7 @@ func (s *shard) updateStats(app string, stats AppStats) error {
 }
 
 func (s *shard) addChannel(secret, channel string) error {
-	hashKey := s.statsHashKey(secret)
+	hashKey := s.channelsHashKey(secret)
 
 	dr := newDataRequest(dataOpAddChannel, []interface{}{hashKey, channel})
 	resp := s.getDataResponse(dr)
@@ -325,7 +333,7 @@ func (s *shard) addChannel(secret, channel string) error {
 }
 
 func (s *shard) remChannel(secret, channel string) error {
-	hashKey := s.statsHashKey(secret)
+	hashKey := s.channelsHashKey(secret)
 
 	dr := newDataRequest(dataOpRemChannel, []interface{}{hashKey, channel})
 	resp := s.getDataResponse(dr)
@@ -353,7 +361,10 @@ func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string]*c
 		}
 
 		var clientInfo clientproto.ClientInfo
-		clientInfo.Unmarshal(value)
+		err := clientInfo.Unmarshal(value)
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling client info", map[string]interface{}{"error": err.Error()}))
+		}
 
 		m[string(key)] = &clientInfo
 	}
@@ -374,10 +385,6 @@ func (s *shard) getDataResponse(r dataRequest) *dataResponse {
 		}
 	}
 	return r.result()
-}
-
-func (s *shard) presenceHashKey(ch string) string {
-	return "client.presence.data." + ch
 }
 
 func newShard(n *Node, conf BrokerShardConfig) (*shard, error) {
@@ -439,10 +446,16 @@ func (s *shard) runPublishPipeline() {
 			err := conn.Send("PUBLISH", "pingchannel", nil)
 			if err != nil {
 				s.node.logger.log(NewLogEntry(LogLevelError, "error publishing to ping channel", map[string]interface{}{"error": err.Error()}))
-				conn.Close()
+				err := conn.Close()
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+				}
 				return
 			}
-			conn.Close()
+			err = conn.Close()
+			if err != nil {
+				s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+			}
 
 		case p := <-s.pubMessages:
 
@@ -460,7 +473,10 @@ func (s *shard) runPublishPipeline() {
 			}
 			conn := s.pool.Get()
 			for i := range prs {
-				conn.Send("PUBLISH", prs[i].chId, prs[i].data)
+				err := conn.Send("PUBLISH", prs[i].chId, prs[i].data)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error publishing data to redis", map[string]interface{}{"error": err.Error()}))
+				}
 				prs[i].done(nil)
 			}
 			err := conn.Flush()
@@ -468,19 +484,27 @@ func (s *shard) runPublishPipeline() {
 				for i := range prs {
 					prs[i].done(err)
 				}
-				conn.Close()
+				err := conn.Close()
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+				}
 				return
 			}
-			conn.Close()
+			err = conn.Close()
+			if err != nil {
+				s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+			}
 			prs = nil
 		}
 	}
 
 }
 
-func (s *shard) Channels(app string) ([]string, error) {
+func (s *shard) Channels(secret string) ([]string, error) {
 
-	dr := newDataRequest(dataOpChannels, []interface{}{"CHANNELS", "*"})
+	channelsHashKey := s.channelsHashKey(secret)
+
+	dr := newDataRequest(dataOpChannels, []interface{}{channelsHashKey})
 	resp := s.getDataResponse(dr)
 
 	if resp.err != nil {
@@ -513,7 +537,11 @@ func (s *shard) runPubSub() {
 		return
 	}
 	if conn.Err() != nil {
-		conn.Close()
+		s.node.logger.log(NewLogEntry(LogLevelError, "error initializing redis connection", map[string]interface{}{"error": conn.Err().Error()}))
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
 		return
 	}
 
@@ -540,7 +568,10 @@ func (s *shard) runPubSub() {
 		for {
 			select {
 			case <-done:
-				psc.Close()
+				err := psc.Close()
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+				}
 				return
 			case r := <-s.subCh:
 				isSubscribe := r.subscribe
@@ -585,7 +616,10 @@ func (s *shard) runPubSub() {
 					if otherR != nil {
 						otherR.done(opErr)
 					}
-					psc.Close()
+					err := psc.Close()
+					if err != nil {
+						s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+					}
 					return
 				}
 				for _, r := range channelBatch {
@@ -605,7 +639,10 @@ func (s *shard) runPubSub() {
 					}
 					if opErr != nil {
 						otherR.done(opErr)
-						psc.Close()
+						err := psc.Close()
+						if err != nil {
+							s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+						}
 						return
 					}
 					otherR.done(nil)
@@ -723,60 +760,87 @@ func (s *shard) RunDataPipeline() {
 	err := s.addPresenceScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading add presence script", map[string]interface{}{"error": err}))
-		conn.Close()
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
 		return
 	}
 
 	err = s.remPresenceScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading remove presence script", map[string]interface{}{"error": err}))
-		conn.Close()
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
 		return
 	}
 
 	err = s.presenceScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading presence script", map[string]interface{}{"error": err}))
-		conn.Close()
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
 		return
 	}
 
 	err = s.getPresenceScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading get presence script", map[string]interface{}{"error": err}))
-		conn.Close()
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
 		return
 	}
 
 	err = s.updateStatsScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading update stats script", map[string]interface{}{"error": err}))
-		conn.Close()
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
 		return
 	}
 
 	err = s.channelsScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading channels script", map[string]interface{}{"error": err}))
-		conn.Close()
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
 		return
 	}
 
 	err = s.addChannelScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading add channel script", map[string]interface{}{"error": err}))
-		conn.Close()
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
 		return
 	}
 
 	err = s.remChannelScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading remove channel script", map[string]interface{}{"error": err}))
-		conn.Close()
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
 		return
 	}
 
-	conn.Close()
+	err = conn.Close()
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+	}
 
 	var drs []dataRequest
 
@@ -817,10 +881,24 @@ func (s *shard) RunDataPipeline() {
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "get presence", "error": err.Error()}))
 				}
-			case dataOpChannels:
-				conn.Send("PUBSUB", drs[i].args...)
 			case dataOpUpdateStats:
 				err := s.updateStatsScript.SendHash(conn, drs[i].args...)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
+				}
+			case dataOpChannels:
+				err := s.channelsScript.SendHash(conn, drs[i].args...)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
+				}
+			case dataOpAddChannel:
+				s.node.logger.log(NewLogEntry(LogLevelError, "received args", map[string]interface{}{"r": drs[i].args}))
+				err := s.addChannelScript.SendHash(conn, drs[i].args...)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
+				}
+			case dataOpRemChannel:
+				err := s.remChannelScript.SendHash(conn, drs[i].args...)
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
 				}
