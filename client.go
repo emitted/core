@@ -184,7 +184,11 @@ func (c *Client) unsubscribeForce(ch string) {
 
 		last, err := c.app.removeSub(ch, uid)
 		if last {
-			err := c.node.broker.Unsubscribe(chId)
+			err := c.node.broker.RemChannel(c.app.Secret, ch)
+			if err != nil {
+				c.node.logger.log(NewLogEntry(LogLevelError, "error removing channel from redis", map[string]interface{}{"channel": ch, "error": err.Error()}))
+			}
+			err = c.node.broker.Unsubscribe(chId)
 			if err != nil {
 				c.node.logger.log(NewLogEntry(LogLevelError, "error unsubscribing from channel", map[string]interface{}{"channel": ch, "error": err.Error()}))
 			}
