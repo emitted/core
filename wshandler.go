@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"go.uber.org/ratelimit"
 	"net/http"
 	"sync"
 	"time"
@@ -271,7 +272,11 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			client.Close(nil)
 		}()
 
+		rl := ratelimit.New(10)
+
 		for {
+
+			rl.Take()
 
 			_, data, err := conn.ReadMessage()
 			if err != nil {

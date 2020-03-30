@@ -514,7 +514,6 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 
 func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
-	c.node.logger.log(NewLogEntry(LogLevelError, "ENTERING SUBSCRIBE"))
 	c.mu.RLock()
 	if !c.authenticated {
 		c.mu.RUnlock()
