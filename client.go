@@ -1,17 +1,15 @@
 package core
 
 import (
-	// "encoding/json"
-
 	"context"
 	"github.com/sireax/core/internal/proto/clientproto"
+	"github.com/sireax/core/internal/proto/webhooks"
 	"github.com/sireax/core/internal/uuid"
 	"io"
 	"sync"
 	"time"
 )
 
-// Client ...
 type Client struct {
 	mu sync.RWMutex
 
@@ -38,7 +36,6 @@ type Client struct {
 	staleTimer *time.Timer
 }
 
-// NewClient ...
 func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, error) {
 
 	uid, _ := uuid.NewV4()
@@ -85,6 +82,15 @@ func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, er
 }
 
 func (c *Client) clientInfo(ch string) *clientproto.ClientInfo {
+
+	switch getChannelType(ch) {
+	case "public":
+		fallthrough
+	case "private":
+		return nil
+	case "presence":
+	}
+
 	chId := makeChId(c.app.Secret, ch)
 
 	info, err := c.node.GetPresence(chId, c.uid)
@@ -195,7 +201,14 @@ func (c *Client) unsubscribeForce(ch string) {
 			return
 		}
 
-		clientInfo := c.clientInfo(ch)
+		var clientInfo *clientproto.ClientInfo
+
+		switch getChannelType(ch) {
+		case "private":
+		case "presence":
+			clientInfo = c.clientInfo(ch)
+		case "public":
+		}
 		leave := &clientproto.Leave{
 			Channel: ch,
 			Data:    clientInfo,
@@ -243,12 +256,12 @@ func (c *Client) Expire() {
 	c.Close(DisconnectExpired)
 }
 
-func (c *Client) Close(disconnect *Disconnect) {
+func (c *Client) Close(disconnect *Disconnect) error {
 	c.mu.RLock()
 
 	if c.closed {
 		c.mu.RUnlock()
-		return
+		return nil
 	}
 	c.closed = true
 
@@ -281,12 +294,16 @@ func (c *Client) Close(disconnect *Disconnect) {
 	err := c.messageWriter.close()
 	if err != nil {
 		c.node.logger.log(NewLogEntry(LogLevelError, "error closing message producer", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
+		return err
 	}
 
 	err = c.transport.Close(disconnect)
 	if err != nil {
 		c.node.logger.log(NewLogEntry(LogLevelError, "error closing transport", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
+		return err
 	}
+
+	return nil
 }
 
 /*
@@ -659,6 +676,57 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return DisconnectServerError
 	}
 
+	////////////
+	// Webhooks
+	////////////
+
+	go func() {
+
+		var info webhooks.ClientInfo
+
+		if p.Data != nil {
+			info = webhooks.ClientInfo{
+				Id:   p.Data.Id,
+				Data: p.Data.Data,
+			}
+		}
+
+		joinWh := webhooks.PresenceAdded{
+			Channel: p.Channel,
+			Uid:     uid,
+			Info:    &info,
+		}
+
+		joinWhData, _ := joinWh.Marshal()
+
+		for _, webhook := range c.app.Options.Webhooks {
+
+			if !webhook.Presence {
+				continue
+			}
+
+			wh := webhooks.Webhook{
+				Id:        0,
+				Signature: "",
+				Event:     webhooks.Event_PRESENCE_ADDED,
+				AppId:     c.app.ID,
+				Url:       webhook.Url,
+				Data:      joinWhData,
+			}
+
+			whData, _ := wh.Marshal()
+
+			err := c.node.webhook.Enqueue(webhookRequest{
+				data: whData,
+			})
+			if err != nil {
+				c.node.logger.log(NewLogEntry(LogLevelError, "error enqueuing webhook", map[string]interface{}{"error": err.Error()}))
+			}
+
+		}
+
+	}()
+
 	return disconnect
 }
 
@@ -732,10 +800,10 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	case "public":
 	}
 
-	info := c.clientInfo(p.Channel)
+	clientInfo := c.clientInfo(p.Channel)
 
 	if !last {
-		err = c.node.broker.HandleUnsubscribe(chId, uid, info, r)
+		err = c.node.broker.HandleUnsubscribe(chId, uid, clientInfo, r)
 		if err != nil {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling unsubscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
 		}
@@ -761,6 +829,52 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	if err != nil {
 		return DisconnectServerError
 	}
+
+	////////////
+	// Webhooks
+	////////////
+
+	go func() {
+
+		info := webhooks.ClientInfo{
+			Id:   clientInfo.Id,
+			Data: clientInfo.Data,
+		}
+		leaveWh := webhooks.PresenceRemoved{
+			Channel: p.Channel,
+			Uid:     c.uid,
+			Info:    &info,
+		}
+
+		leaveWhData, _ := leaveWh.Marshal()
+		for _, webhook := range c.app.Options.Webhooks {
+
+			if !webhook.Presence {
+				continue
+			}
+
+			wh := webhooks.Webhook{
+				Id:        0,
+				Signature: "",
+				Event:     webhooks.Event_PRESENCE_REMOVED,
+				AppId:     c.app.ID,
+				Url:       webhook.Url,
+				Data:      leaveWhData,
+			}
+
+			whData, _ := wh.Marshal()
+
+			whR := webhookRequest{
+				data: whData,
+			}
+
+			err := c.node.webhook.Enqueue(whR)
+			if err != nil {
+
+			}
+		}
+
+	}()
 
 	return disconnect
 }
@@ -832,6 +946,60 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 	if err != nil {
 		return DisconnectServerError
 	}
+
+	////////////
+	// Webhooks
+	////////////
+
+	go func() {
+
+		var info webhooks.ClientInfo
+
+		if clientInfo != nil {
+			info = webhooks.ClientInfo{
+				Id:   clientInfo.Id,
+				Data: clientInfo.Data,
+			}
+		}
+
+		pubWh := webhooks.Publication{
+			Channel: p.Channel,
+			Uid:     c.uid,
+			Data:    p.Data,
+			Info:    &info,
+		}
+
+		pubWhBytes, _ := pubWh.Marshal()
+
+		for _, webhook := range c.app.Options.Webhooks {
+
+			if !webhook.Publication {
+				continue
+			}
+
+			wh := webhooks.Webhook{
+				Id:        0,
+				Timestamp: time.Now().Unix(),
+				Signature: "",
+				Event:     webhooks.Event_PUBLICATION,
+				AppId:     c.app.ID,
+				Url:       webhook.Url,
+				Data:      pubWhBytes,
+			}
+
+			whBytes, _ := wh.Marshal()
+
+			r := webhookRequest{
+				data: whBytes,
+			}
+
+			err := c.node.webhook.Enqueue(r)
+			if err != nil {
+				c.node.logger.log(NewLogEntry(LogLevelError, "error enqueuing webhook", map[string]interface{}{"error": err.Error()}))
+			}
+		}
+
+	}()
 
 	return disconnect
 }

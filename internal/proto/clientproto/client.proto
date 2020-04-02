@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package clientproto;
 
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
 enum MethodType {
     CONNECT = 0;
     SUBSCRIBE = 1;

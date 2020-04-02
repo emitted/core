@@ -4,7 +4,9 @@
 package webhooks
 
 import (
+	bytes "bytes"
 	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
@@ -56,15 +58,60 @@ func (Event) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_1f2e9c14ce269d50, []int{0}
 }
 
+type ClientInfo struct {
+	Id   string `protobuf:"bytes,1,opt,name=id,proto3" json:"id"`
+	Data Raw    `protobuf:"bytes,2,opt,name=data,proto3,customtype=Raw" json:"data,omitempty"`
+}
+
+func (m *ClientInfo) Reset()         { *m = ClientInfo{} }
+func (m *ClientInfo) String() string { return proto.CompactTextString(m) }
+func (*ClientInfo) ProtoMessage()    {}
+func (*ClientInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1f2e9c14ce269d50, []int{0}
+}
+func (m *ClientInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ClientInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ClientInfo.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ClientInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ClientInfo.Merge(m, src)
+}
+func (m *ClientInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *ClientInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_ClientInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ClientInfo proto.InternalMessageInfo
+
+func (m *ClientInfo) GetId() string {
+	if m != nil {
+		return m.Id
+	}
+	return ""
+}
+
 type ChannelOccupied struct {
-	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
 }
 
 func (m *ChannelOccupied) Reset()         { *m = ChannelOccupied{} }
 func (m *ChannelOccupied) String() string { return proto.CompactTextString(m) }
 func (*ChannelOccupied) ProtoMessage()    {}
 func (*ChannelOccupied) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2e9c14ce269d50, []int{0}
+	return fileDescriptor_1f2e9c14ce269d50, []int{1}
 }
 func (m *ChannelOccupied) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -101,14 +148,14 @@ func (m *ChannelOccupied) GetChannel() string {
 }
 
 type ChannelVacated struct {
-	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
 }
 
 func (m *ChannelVacated) Reset()         { *m = ChannelVacated{} }
 func (m *ChannelVacated) String() string { return proto.CompactTextString(m) }
 func (*ChannelVacated) ProtoMessage()    {}
 func (*ChannelVacated) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2e9c14ce269d50, []int{1}
+	return fileDescriptor_1f2e9c14ce269d50, []int{2}
 }
 func (m *ChannelVacated) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -144,62 +191,10 @@ func (m *ChannelVacated) GetChannel() string {
 	return ""
 }
 
-type ClientInfo struct {
-	Id   string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Info []byte `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
-}
-
-func (m *ClientInfo) Reset()         { *m = ClientInfo{} }
-func (m *ClientInfo) String() string { return proto.CompactTextString(m) }
-func (*ClientInfo) ProtoMessage()    {}
-func (*ClientInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2e9c14ce269d50, []int{2}
-}
-func (m *ClientInfo) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ClientInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ClientInfo.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ClientInfo) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ClientInfo.Merge(m, src)
-}
-func (m *ClientInfo) XXX_Size() int {
-	return m.Size()
-}
-func (m *ClientInfo) XXX_DiscardUnknown() {
-	xxx_messageInfo_ClientInfo.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ClientInfo proto.InternalMessageInfo
-
-func (m *ClientInfo) GetId() string {
-	if m != nil {
-		return m.Id
-	}
-	return ""
-}
-
-func (m *ClientInfo) GetInfo() []byte {
-	if m != nil {
-		return m.Info
-	}
-	return nil
-}
-
 type PresenceAdded struct {
-	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
-	Uid     string `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid,omitempty"`
-	Info    []byte `protobuf:"bytes,3,opt,name=info,proto3" json:"info,omitempty"`
+	Channel string      `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	Uid     string      `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid"`
+	Info    *ClientInfo `protobuf:"bytes,3,opt,name=info,proto3" json:"info"`
 }
 
 func (m *PresenceAdded) Reset()         { *m = PresenceAdded{} }
@@ -249,7 +244,7 @@ func (m *PresenceAdded) GetUid() string {
 	return ""
 }
 
-func (m *PresenceAdded) GetInfo() []byte {
+func (m *PresenceAdded) GetInfo() *ClientInfo {
 	if m != nil {
 		return m.Info
 	}
@@ -257,9 +252,9 @@ func (m *PresenceAdded) GetInfo() []byte {
 }
 
 type PresenceRemoved struct {
-	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
-	Uid     string `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid,omitempty"`
-	Info    []byte `protobuf:"bytes,3,opt,name=info,proto3" json:"info,omitempty"`
+	Channel string      `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	Uid     string      `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid"`
+	Info    *ClientInfo `protobuf:"bytes,3,opt,name=info,proto3" json:"info"`
 }
 
 func (m *PresenceRemoved) Reset()         { *m = PresenceRemoved{} }
@@ -309,7 +304,7 @@ func (m *PresenceRemoved) GetUid() string {
 	return ""
 }
 
-func (m *PresenceRemoved) GetInfo() []byte {
+func (m *PresenceRemoved) GetInfo() *ClientInfo {
 	if m != nil {
 		return m.Info
 	}
@@ -317,10 +312,10 @@ func (m *PresenceRemoved) GetInfo() []byte {
 }
 
 type Publication struct {
-	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
-	Uid     string `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid,omitempty"`
-	Data    []byte `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
-	Info    []byte `protobuf:"bytes,4,opt,name=info,proto3" json:"info,omitempty"`
+	Channel string      `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	Uid     string      `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid"`
+	Data    Raw         `protobuf:"bytes,3,opt,name=data,proto3,customtype=Raw" json:"data,omitempty"`
+	Info    *ClientInfo `protobuf:"bytes,4,opt,name=info,proto3" json:"info"`
 }
 
 func (m *Publication) Reset()         { *m = Publication{} }
@@ -370,18 +365,56 @@ func (m *Publication) GetUid() string {
 	return ""
 }
 
-func (m *Publication) GetData() []byte {
-	if m != nil {
-		return m.Data
-	}
-	return nil
-}
-
-func (m *Publication) GetInfo() []byte {
+func (m *Publication) GetInfo() *ClientInfo {
 	if m != nil {
 		return m.Info
 	}
 	return nil
+}
+
+type Hook struct {
+	Event Event `protobuf:"varint,1,opt,name=event,proto3,enum=webhooks.Event" json:"event,omitempty"`
+	Data  Raw   `protobuf:"bytes,2,opt,name=data,proto3,customtype=Raw" json:"data,omitempty"`
+}
+
+func (m *Hook) Reset()         { *m = Hook{} }
+func (m *Hook) String() string { return proto.CompactTextString(m) }
+func (*Hook) ProtoMessage()    {}
+func (*Hook) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1f2e9c14ce269d50, []int{6}
+}
+func (m *Hook) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Hook) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Hook.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Hook) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Hook.Merge(m, src)
+}
+func (m *Hook) XXX_Size() int {
+	return m.Size()
+}
+func (m *Hook) XXX_DiscardUnknown() {
+	xxx_messageInfo_Hook.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Hook proto.InternalMessageInfo
+
+func (m *Hook) GetEvent() Event {
+	if m != nil {
+		return m.Event
+	}
+	return Event_CHANNEL_OCCUPIED
 }
 
 type Webhook struct {
@@ -398,7 +431,7 @@ func (m *Webhook) Reset()         { *m = Webhook{} }
 func (m *Webhook) String() string { return proto.CompactTextString(m) }
 func (*Webhook) ProtoMessage()    {}
 func (*Webhook) Descriptor() ([]byte, []int) {
-	return fileDescriptor_1f2e9c14ce269d50, []int{6}
+	return fileDescriptor_1f2e9c14ce269d50, []int{7}
 }
 func (m *Webhook) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -478,46 +511,333 @@ func (m *Webhook) GetData() []byte {
 
 func init() {
 	proto.RegisterEnum("webhooks.Event", Event_name, Event_value)
+	proto.RegisterType((*ClientInfo)(nil), "webhooks.ClientInfo")
 	proto.RegisterType((*ChannelOccupied)(nil), "webhooks.ChannelOccupied")
 	proto.RegisterType((*ChannelVacated)(nil), "webhooks.ChannelVacated")
-	proto.RegisterType((*ClientInfo)(nil), "webhooks.ClientInfo")
 	proto.RegisterType((*PresenceAdded)(nil), "webhooks.PresenceAdded")
 	proto.RegisterType((*PresenceRemoved)(nil), "webhooks.PresenceRemoved")
 	proto.RegisterType((*Publication)(nil), "webhooks.Publication")
+	proto.RegisterType((*Hook)(nil), "webhooks.Hook")
 	proto.RegisterType((*Webhook)(nil), "webhooks.Webhook")
 }
 
 func init() { proto.RegisterFile("webhooks.proto", fileDescriptor_1f2e9c14ce269d50) }
 
 var fileDescriptor_1f2e9c14ce269d50 = []byte{
-	// 420 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x92, 0xdf, 0x6a, 0xdb, 0x30,
-	0x14, 0xc6, 0xe3, 0xfc, 0x69, 0x96, 0xd3, 0xd5, 0x36, 0xda, 0x2e, 0x7c, 0x31, 0x4c, 0x09, 0x0c,
-	0x4a, 0x07, 0x65, 0x6c, 0x4f, 0xe0, 0xca, 0x82, 0x19, 0xba, 0xd8, 0xd3, 0xda, 0xec, 0xb2, 0x28,
-	0x96, 0xba, 0x8a, 0x39, 0x92, 0x71, 0x94, 0xee, 0x35, 0xf6, 0x38, 0x7b, 0x84, 0x5d, 0xf6, 0x72,
-	0x97, 0x23, 0x79, 0x91, 0x61, 0xc5, 0x76, 0x72, 0x55, 0x18, 0xec, 0xee, 0x9c, 0x4f, 0x47, 0xbf,
-	0x8f, 0x4f, 0x3a, 0xe0, 0x7e, 0x17, 0x8b, 0x7b, 0xad, 0xbf, 0xad, 0x2e, 0xca, 0x4a, 0x1b, 0x8d,
-	0x9e, 0xb5, 0xfd, 0xf4, 0x0d, 0x78, 0xf8, 0x9e, 0x29, 0x25, 0x8a, 0x34, 0xcf, 0xd7, 0xa5, 0x14,
-	0x1c, 0x05, 0x30, 0xce, 0x77, 0x52, 0xe0, 0x9c, 0x3a, 0x67, 0x13, 0xda, 0xb6, 0xd3, 0x73, 0x70,
-	0x9b, 0xe1, 0x39, 0xcb, 0x99, 0x79, 0x72, 0xf6, 0x2d, 0x00, 0x2e, 0xa4, 0x50, 0x26, 0x51, 0x77,
-	0x1a, 0xb9, 0xd0, 0x97, 0xbc, 0x19, 0xe9, 0x4b, 0x8e, 0x10, 0x0c, 0xa5, 0xba, 0xd3, 0x41, 0xff,
-	0xd4, 0x39, 0x7b, 0x4e, 0x6d, 0x3d, 0x4d, 0xe1, 0x24, 0xab, 0xc4, 0x4a, 0xa8, 0x5c, 0x44, 0x9c,
-	0x3f, 0x05, 0x47, 0x3e, 0x0c, 0xd6, 0x92, 0xdb, 0xdb, 0x13, 0x5a, 0x97, 0x1d, 0x70, 0x70, 0x00,
-	0xfc, 0x04, 0x5e, 0x0b, 0xa4, 0x62, 0xa9, 0x1f, 0xfe, 0x03, 0x92, 0xc1, 0x71, 0xb6, 0x5e, 0x14,
-	0x32, 0x67, 0x46, 0x6a, 0xf5, 0xaf, 0x38, 0xce, 0x0c, 0x6b, 0x71, 0x75, 0xdd, 0x59, 0x0c, 0x0f,
-	0x2c, 0x7e, 0x3a, 0x30, 0xfe, 0xb2, 0xfb, 0x9e, 0x83, 0x67, 0x3b, 0xb1, 0xcf, 0xf6, 0x0a, 0x26,
-	0x46, 0x2e, 0xc5, 0xca, 0xb0, 0x65, 0x69, 0xd9, 0x03, 0xba, 0x17, 0xea, 0xd3, 0x95, 0xfc, 0xaa,
-	0x98, 0x59, 0x57, 0xc2, 0xda, 0x4c, 0xe8, 0x5e, 0x40, 0xaf, 0x61, 0x24, 0x1e, 0x84, 0x32, 0xd6,
-	0xcc, 0x7d, 0xe7, 0x5d, 0x74, 0x3b, 0x41, 0x6a, 0x99, 0xee, 0x4e, 0xd1, 0x4b, 0x18, 0xb1, 0xb2,
-	0x4c, 0x78, 0x30, 0xb2, 0x80, 0x5d, 0x63, 0xe3, 0x54, 0x45, 0x70, 0xd4, 0xc4, 0xa9, 0x8a, 0x2e,
-	0xce, 0x78, 0x1f, 0xe7, 0x7c, 0x09, 0x23, 0xd2, 0x40, 0x7c, 0xfc, 0x21, 0x9a, 0xcd, 0xc8, 0xd5,
-	0x6d, 0x8a, 0xf1, 0x4d, 0x96, 0x90, 0xd8, 0xef, 0xa1, 0x17, 0xe0, 0xb5, 0xea, 0x3c, 0xc2, 0xd1,
-	0x35, 0x89, 0x7d, 0x07, 0x21, 0x70, 0x33, 0x4a, 0x3e, 0x93, 0x19, 0x26, 0xb7, 0x51, 0x1c, 0x93,
-	0xd8, 0xef, 0xd7, 0xd7, 0x3b, 0x8d, 0x92, 0x8f, 0xe9, 0x9c, 0xc4, 0xfe, 0x00, 0x79, 0x70, 0x9c,
-	0xdd, 0x5c, 0x5e, 0x25, 0x38, 0xba, 0x4e, 0xd2, 0x99, 0x3f, 0xbc, 0x0c, 0x7e, 0x6d, 0x42, 0xe7,
-	0x71, 0x13, 0x3a, 0x7f, 0x36, 0xa1, 0xf3, 0x63, 0x1b, 0xf6, 0x1e, 0xb7, 0x61, 0xef, 0xf7, 0x36,
-	0xec, 0x2d, 0x8e, 0xec, 0x9a, 0xbf, 0xff, 0x1b, 0x00, 0x00, 0xff, 0xff, 0x57, 0xcd, 0x64, 0x48,
-	0xf8, 0x02, 0x00, 0x00,
+	// 562 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x54, 0xcf, 0x6e, 0xd3, 0x4e,
+	0x10, 0xce, 0xc6, 0x4e, 0xd3, 0x6c, 0x7e, 0x75, 0xac, 0xfd, 0x55, 0x28, 0x20, 0xb0, 0xab, 0x88,
+	0x4a, 0x15, 0x82, 0x56, 0x84, 0x03, 0x5c, 0xfd, 0x4f, 0x6a, 0xa4, 0x92, 0x44, 0x4b, 0x9b, 0x1e,
+	0x8b, 0x63, 0x6f, 0x92, 0x55, 0x63, 0xaf, 0x95, 0xac, 0x5b, 0xf1, 0x00, 0x88, 0x2b, 0x8f, 0xc1,
+	0x13, 0xa0, 0x3e, 0x42, 0x8f, 0x3d, 0x22, 0x0e, 0x16, 0x24, 0xb7, 0x3c, 0x01, 0x47, 0xe4, 0x75,
+	0x9c, 0xdc, 0x50, 0x40, 0x48, 0x5c, 0x56, 0x33, 0xdf, 0xcc, 0x37, 0xfe, 0x66, 0xf4, 0xc9, 0x50,
+	0xb9, 0x26, 0xfd, 0x11, 0x63, 0x97, 0xd3, 0xc3, 0x68, 0xc2, 0x38, 0x43, 0xdb, 0x79, 0xfe, 0xe0,
+	0xd9, 0x90, 0xf2, 0x51, 0xdc, 0x3f, 0xf4, 0x58, 0x70, 0x34, 0x64, 0x43, 0x76, 0x24, 0x1a, 0xfa,
+	0xf1, 0x40, 0x64, 0x22, 0x11, 0x51, 0x46, 0x6c, 0x9c, 0x43, 0x68, 0x8d, 0x29, 0x09, 0x79, 0x2b,
+	0x1c, 0x30, 0x74, 0x0f, 0x16, 0xa9, 0x5f, 0x07, 0x7b, 0xe0, 0xa0, 0x62, 0x6e, 0x2d, 0x12, 0xbd,
+	0x48, 0x7d, 0x5c, 0xa4, 0x3e, 0x7a, 0x0e, 0x65, 0xdf, 0xe5, 0x6e, 0xbd, 0xb8, 0x07, 0x0e, 0xfe,
+	0x33, 0x1f, 0xdd, 0x26, 0x7a, 0xe1, 0x6b, 0xa2, 0x4b, 0xd8, 0xbd, 0x5e, 0x24, 0xba, 0x92, 0x96,
+	0x9e, 0xb2, 0x80, 0x72, 0x12, 0x44, 0xfc, 0x1d, 0x16, 0xad, 0x8d, 0x57, 0xb0, 0x66, 0x8d, 0xdc,
+	0x30, 0x24, 0xe3, 0x8e, 0xe7, 0xc5, 0x11, 0x25, 0x3e, 0xda, 0x87, 0x65, 0x2f, 0x83, 0x96, 0x9f,
+	0xa8, 0x2e, 0x12, 0x3d, 0x87, 0x70, 0x1e, 0x34, 0x5e, 0x42, 0x65, 0xc9, 0xec, 0xb9, 0x9e, 0xcb,
+	0x37, 0x27, 0xbe, 0x07, 0x70, 0xa7, 0x3b, 0x21, 0x53, 0x12, 0x7a, 0xc4, 0xf0, 0xfd, 0x8d, 0x89,
+	0xe8, 0x3e, 0x94, 0x62, 0xea, 0x8b, 0xed, 0x2a, 0x66, 0x79, 0x91, 0xe8, 0x69, 0x8a, 0xd3, 0x07,
+	0x35, 0xa1, 0x4c, 0xc3, 0x01, 0xab, 0x4b, 0x7b, 0xe0, 0xa0, 0xda, 0xdc, 0x3d, 0x5c, 0xdd, 0x7d,
+	0x7d, 0x35, 0x73, 0x7b, 0x91, 0xe8, 0xa2, 0x0b, 0x8b, 0xb7, 0xf1, 0x01, 0xc0, 0x5a, 0xae, 0x03,
+	0x93, 0x80, 0x5d, 0xfd, 0x33, 0x25, 0x9f, 0x01, 0xac, 0x76, 0xe3, 0xfe, 0x98, 0x7a, 0x2e, 0xa7,
+	0x2c, 0xfc, 0x0b, 0x2a, 0x72, 0x27, 0x48, 0x1b, 0x3b, 0x61, 0x25, 0x5c, 0xfe, 0x0d, 0xe1, 0x6f,
+	0xa1, 0x7c, 0xcc, 0xd8, 0x25, 0xda, 0x87, 0x25, 0x72, 0x45, 0x42, 0x2e, 0xe4, 0x2a, 0xcd, 0xda,
+	0x9a, 0xec, 0xa4, 0x30, 0xce, 0xaa, 0x7f, 0xe2, 0xcf, 0x1b, 0x00, 0xcb, 0xe7, 0xd9, 0x30, 0xa4,
+	0xac, 0x6c, 0xbf, 0x23, 0xec, 0xfe, 0x10, 0x56, 0x38, 0x0d, 0xc8, 0x94, 0xbb, 0x41, 0x24, 0x66,
+	0x4a, 0x78, 0x0d, 0xa4, 0xd5, 0x29, 0x1d, 0x86, 0x2e, 0x8f, 0x27, 0x44, 0xdc, 0xa1, 0x82, 0xd7,
+	0xc0, 0x5a, 0xb1, 0xfc, 0x4b, 0xc5, 0xbb, 0xb0, 0xe4, 0x46, 0x51, 0xcb, 0xaf, 0x97, 0xc4, 0x80,
+	0x2c, 0x41, 0x2a, 0x94, 0xe2, 0xc9, 0xb8, 0xbe, 0x25, 0xb0, 0x34, 0x44, 0x68, 0xb9, 0x59, 0x39,
+	0xdd, 0x2c, 0x93, 0xfe, 0x24, 0x80, 0x25, 0x67, 0x39, 0x44, 0xb5, 0x8e, 0x8d, 0x76, 0xdb, 0x39,
+	0xb9, 0xe8, 0x58, 0xd6, 0x59, 0xb7, 0xe5, 0xd8, 0x6a, 0x01, 0xfd, 0x0f, 0x6b, 0x39, 0xda, 0x33,
+	0x2c, 0xe3, 0xd4, 0xb1, 0x55, 0x80, 0x10, 0x54, 0xba, 0xd8, 0x79, 0xe3, 0xb4, 0x2d, 0xe7, 0xc2,
+	0xb0, 0x6d, 0xc7, 0x56, 0x8b, 0x29, 0x7d, 0x85, 0x61, 0xe7, 0x75, 0xa7, 0xe7, 0xd8, 0xaa, 0x84,
+	0x6a, 0xb0, 0xda, 0x3d, 0x33, 0x4f, 0x5a, 0x96, 0x71, 0xda, 0xea, 0xb4, 0x55, 0xd9, 0x7c, 0xfc,
+	0xe3, 0xbb, 0x06, 0x3e, 0xcd, 0x34, 0x70, 0x33, 0xd3, 0xc0, 0xed, 0x4c, 0x03, 0x77, 0x33, 0x0d,
+	0x7c, 0x9b, 0x69, 0xe0, 0xe3, 0x5c, 0x2b, 0xdc, 0xcd, 0xb5, 0xc2, 0x97, 0xb9, 0x56, 0xe8, 0x6f,
+	0x89, 0xff, 0xc9, 0x8b, 0x9f, 0x01, 0x00, 0x00, 0xff, 0xff, 0x94, 0x66, 0x4b, 0x85, 0x9a, 0x04,
+	0x00, 0x00,
+}
+
+func (this *ClientInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ClientInfo)
+	if !ok {
+		that2, ok := that.(ClientInfo)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Id != that1.Id {
+		return false
+	}
+	if !this.Data.Equal(that1.Data) {
+		return false
+	}
+	return true
+}
+func (this *ChannelOccupied) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ChannelOccupied)
+	if !ok {
+		that2, ok := that.(ChannelOccupied)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Channel != that1.Channel {
+		return false
+	}
+	return true
+}
+func (this *ChannelVacated) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ChannelVacated)
+	if !ok {
+		that2, ok := that.(ChannelVacated)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Channel != that1.Channel {
+		return false
+	}
+	return true
+}
+func (this *PresenceAdded) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*PresenceAdded)
+	if !ok {
+		that2, ok := that.(PresenceAdded)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Channel != that1.Channel {
+		return false
+	}
+	if this.Uid != that1.Uid {
+		return false
+	}
+	if !this.Info.Equal(that1.Info) {
+		return false
+	}
+	return true
+}
+func (this *PresenceRemoved) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*PresenceRemoved)
+	if !ok {
+		that2, ok := that.(PresenceRemoved)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Channel != that1.Channel {
+		return false
+	}
+	if this.Uid != that1.Uid {
+		return false
+	}
+	if !this.Info.Equal(that1.Info) {
+		return false
+	}
+	return true
+}
+func (this *Publication) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Publication)
+	if !ok {
+		that2, ok := that.(Publication)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Channel != that1.Channel {
+		return false
+	}
+	if this.Uid != that1.Uid {
+		return false
+	}
+	if !this.Data.Equal(that1.Data) {
+		return false
+	}
+	if !this.Info.Equal(that1.Info) {
+		return false
+	}
+	return true
+}
+func (this *Hook) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Hook)
+	if !ok {
+		that2, ok := that.(Hook)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Event != that1.Event {
+		return false
+	}
+	if !this.Data.Equal(that1.Data) {
+		return false
+	}
+	return true
+}
+func (this *Webhook) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*Webhook)
+	if !ok {
+		that2, ok := that.(Webhook)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Id != that1.Id {
+		return false
+	}
+	if this.Timestamp != that1.Timestamp {
+		return false
+	}
+	if this.Signature != that1.Signature {
+		return false
+	}
+	if this.Event != that1.Event {
+		return false
+	}
+	if this.AppId != that1.AppId {
+		return false
+	}
+	if this.Url != that1.Url {
+		return false
+	}
+	if !bytes.Equal(this.Data, that1.Data) {
+		return false
+	}
+	return true
+}
+func (m *ClientInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ClientInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ClientInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size := m.Data.Size()
+		i -= size
+		if _, err := m.Data.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintWebhooks(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	if len(m.Id) > 0 {
+		i -= len(m.Id)
+		copy(dAtA[i:], m.Id)
+		i = encodeVarintWebhooks(dAtA, i, uint64(len(m.Id)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *ChannelOccupied) Marshal() (dAtA []byte, err error) {
@@ -580,43 +900,6 @@ func (m *ChannelVacated) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *ClientInfo) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ClientInfo) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ClientInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.Info) > 0 {
-		i -= len(m.Info)
-		copy(dAtA[i:], m.Info)
-		i = encodeVarintWebhooks(dAtA, i, uint64(len(m.Info)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Id) > 0 {
-		i -= len(m.Id)
-		copy(dAtA[i:], m.Id)
-		i = encodeVarintWebhooks(dAtA, i, uint64(len(m.Id)))
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
 func (m *PresenceAdded) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -637,10 +920,15 @@ func (m *PresenceAdded) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Info) > 0 {
-		i -= len(m.Info)
-		copy(dAtA[i:], m.Info)
-		i = encodeVarintWebhooks(dAtA, i, uint64(len(m.Info)))
+	if m.Info != nil {
+		{
+			size, err := m.Info.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintWebhooks(dAtA, i, uint64(size))
+		}
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -681,10 +969,15 @@ func (m *PresenceRemoved) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Info) > 0 {
-		i -= len(m.Info)
-		copy(dAtA[i:], m.Info)
-		i = encodeVarintWebhooks(dAtA, i, uint64(len(m.Info)))
+	if m.Info != nil {
+		{
+			size, err := m.Info.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintWebhooks(dAtA, i, uint64(size))
+		}
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -725,20 +1018,28 @@ func (m *Publication) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Info) > 0 {
-		i -= len(m.Info)
-		copy(dAtA[i:], m.Info)
-		i = encodeVarintWebhooks(dAtA, i, uint64(len(m.Info)))
+	if m.Info != nil {
+		{
+			size, err := m.Info.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintWebhooks(dAtA, i, uint64(size))
+		}
 		i--
 		dAtA[i] = 0x22
 	}
-	if len(m.Data) > 0 {
-		i -= len(m.Data)
-		copy(dAtA[i:], m.Data)
-		i = encodeVarintWebhooks(dAtA, i, uint64(len(m.Data)))
-		i--
-		dAtA[i] = 0x1a
+	{
+		size := m.Data.Size()
+		i -= size
+		if _, err := m.Data.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintWebhooks(dAtA, i, uint64(size))
 	}
+	i--
+	dAtA[i] = 0x1a
 	if len(m.Uid) > 0 {
 		i -= len(m.Uid)
 		copy(dAtA[i:], m.Uid)
@@ -752,6 +1053,44 @@ func (m *Publication) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i = encodeVarintWebhooks(dAtA, i, uint64(len(m.Channel)))
 		i--
 		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Hook) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Hook) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Hook) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size := m.Data.Size()
+		i -= size
+		if _, err := m.Data.MarshalTo(dAtA[i:]); err != nil {
+			return 0, err
+		}
+		i = encodeVarintWebhooks(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	if m.Event != 0 {
+		i = encodeVarintWebhooks(dAtA, i, uint64(m.Event))
+		i--
+		dAtA[i] = 0x8
 	}
 	return len(dAtA) - i, nil
 }
@@ -833,6 +1172,188 @@ func encodeVarintWebhooks(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+func NewPopulatedClientInfo(r randyWebhooks, easy bool) *ClientInfo {
+	this := &ClientInfo{}
+	this.Id = string(randStringWebhooks(r))
+	v1 := NewPopulatedRaw(r)
+	this.Data = *v1
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedChannelOccupied(r randyWebhooks, easy bool) *ChannelOccupied {
+	this := &ChannelOccupied{}
+	this.Channel = string(randStringWebhooks(r))
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedChannelVacated(r randyWebhooks, easy bool) *ChannelVacated {
+	this := &ChannelVacated{}
+	this.Channel = string(randStringWebhooks(r))
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedPresenceAdded(r randyWebhooks, easy bool) *PresenceAdded {
+	this := &PresenceAdded{}
+	this.Channel = string(randStringWebhooks(r))
+	this.Uid = string(randStringWebhooks(r))
+	if r.Intn(5) != 0 {
+		this.Info = NewPopulatedClientInfo(r, easy)
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedPresenceRemoved(r randyWebhooks, easy bool) *PresenceRemoved {
+	this := &PresenceRemoved{}
+	this.Channel = string(randStringWebhooks(r))
+	this.Uid = string(randStringWebhooks(r))
+	if r.Intn(5) != 0 {
+		this.Info = NewPopulatedClientInfo(r, easy)
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedPublication(r randyWebhooks, easy bool) *Publication {
+	this := &Publication{}
+	this.Channel = string(randStringWebhooks(r))
+	this.Uid = string(randStringWebhooks(r))
+	v2 := NewPopulatedRaw(r)
+	this.Data = *v2
+	if r.Intn(5) != 0 {
+		this.Info = NewPopulatedClientInfo(r, easy)
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedHook(r randyWebhooks, easy bool) *Hook {
+	this := &Hook{}
+	this.Event = Event([]int32{0, 1, 2, 3, 4}[r.Intn(5)])
+	v3 := NewPopulatedRaw(r)
+	this.Data = *v3
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+func NewPopulatedWebhook(r randyWebhooks, easy bool) *Webhook {
+	this := &Webhook{}
+	this.Id = uint32(r.Uint32())
+	this.Timestamp = int64(r.Int63())
+	if r.Intn(2) == 0 {
+		this.Timestamp *= -1
+	}
+	this.Signature = string(randStringWebhooks(r))
+	this.Event = Event([]int32{0, 1, 2, 3, 4}[r.Intn(5)])
+	this.AppId = string(randStringWebhooks(r))
+	this.Url = string(randStringWebhooks(r))
+	v4 := r.Intn(100)
+	this.Data = make([]byte, v4)
+	for i := 0; i < v4; i++ {
+		this.Data[i] = byte(r.Intn(256))
+	}
+	if !easy && r.Intn(10) != 0 {
+	}
+	return this
+}
+
+type randyWebhooks interface {
+	Float32() float32
+	Float64() float64
+	Int63() int64
+	Int31() int32
+	Uint32() uint32
+	Intn(n int) int
+}
+
+func randUTF8RuneWebhooks(r randyWebhooks) rune {
+	ru := r.Intn(62)
+	if ru < 10 {
+		return rune(ru + 48)
+	} else if ru < 36 {
+		return rune(ru + 55)
+	}
+	return rune(ru + 61)
+}
+func randStringWebhooks(r randyWebhooks) string {
+	v5 := r.Intn(100)
+	tmps := make([]rune, v5)
+	for i := 0; i < v5; i++ {
+		tmps[i] = randUTF8RuneWebhooks(r)
+	}
+	return string(tmps)
+}
+func randUnrecognizedWebhooks(r randyWebhooks, maxFieldNumber int) (dAtA []byte) {
+	l := r.Intn(5)
+	for i := 0; i < l; i++ {
+		wire := r.Intn(4)
+		if wire == 3 {
+			wire = 5
+		}
+		fieldNumber := maxFieldNumber + r.Intn(100)
+		dAtA = randFieldWebhooks(dAtA, r, fieldNumber, wire)
+	}
+	return dAtA
+}
+func randFieldWebhooks(dAtA []byte, r randyWebhooks, fieldNumber int, wire int) []byte {
+	key := uint32(fieldNumber)<<3 | uint32(wire)
+	switch wire {
+	case 0:
+		dAtA = encodeVarintPopulateWebhooks(dAtA, uint64(key))
+		v6 := r.Int63()
+		if r.Intn(2) == 0 {
+			v6 *= -1
+		}
+		dAtA = encodeVarintPopulateWebhooks(dAtA, uint64(v6))
+	case 1:
+		dAtA = encodeVarintPopulateWebhooks(dAtA, uint64(key))
+		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
+	case 2:
+		dAtA = encodeVarintPopulateWebhooks(dAtA, uint64(key))
+		ll := r.Intn(100)
+		dAtA = encodeVarintPopulateWebhooks(dAtA, uint64(ll))
+		for j := 0; j < ll; j++ {
+			dAtA = append(dAtA, byte(r.Intn(256)))
+		}
+	default:
+		dAtA = encodeVarintPopulateWebhooks(dAtA, uint64(key))
+		dAtA = append(dAtA, byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)))
+	}
+	return dAtA
+}
+func encodeVarintPopulateWebhooks(dAtA []byte, v uint64) []byte {
+	for v >= 1<<7 {
+		dAtA = append(dAtA, uint8(uint64(v)&0x7f|0x80))
+		v >>= 7
+	}
+	dAtA = append(dAtA, uint8(v))
+	return dAtA
+}
+func (m *ClientInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Id)
+	if l > 0 {
+		n += 1 + l + sovWebhooks(uint64(l))
+	}
+	l = m.Data.Size()
+	n += 1 + l + sovWebhooks(uint64(l))
+	return n
+}
+
 func (m *ChannelOccupied) Size() (n int) {
 	if m == nil {
 		return 0
@@ -859,23 +1380,6 @@ func (m *ChannelVacated) Size() (n int) {
 	return n
 }
 
-func (m *ClientInfo) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.Id)
-	if l > 0 {
-		n += 1 + l + sovWebhooks(uint64(l))
-	}
-	l = len(m.Info)
-	if l > 0 {
-		n += 1 + l + sovWebhooks(uint64(l))
-	}
-	return n
-}
-
 func (m *PresenceAdded) Size() (n int) {
 	if m == nil {
 		return 0
@@ -890,8 +1394,8 @@ func (m *PresenceAdded) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovWebhooks(uint64(l))
 	}
-	l = len(m.Info)
-	if l > 0 {
+	if m.Info != nil {
+		l = m.Info.Size()
 		n += 1 + l + sovWebhooks(uint64(l))
 	}
 	return n
@@ -911,8 +1415,8 @@ func (m *PresenceRemoved) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovWebhooks(uint64(l))
 	}
-	l = len(m.Info)
-	if l > 0 {
+	if m.Info != nil {
+		l = m.Info.Size()
 		n += 1 + l + sovWebhooks(uint64(l))
 	}
 	return n
@@ -932,14 +1436,26 @@ func (m *Publication) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovWebhooks(uint64(l))
 	}
-	l = len(m.Data)
-	if l > 0 {
+	l = m.Data.Size()
+	n += 1 + l + sovWebhooks(uint64(l))
+	if m.Info != nil {
+		l = m.Info.Size()
 		n += 1 + l + sovWebhooks(uint64(l))
 	}
-	l = len(m.Info)
-	if l > 0 {
-		n += 1 + l + sovWebhooks(uint64(l))
+	return n
+}
+
+func (m *Hook) Size() (n int) {
+	if m == nil {
+		return 0
 	}
+	var l int
+	_ = l
+	if m.Event != 0 {
+		n += 1 + sovWebhooks(uint64(m.Event))
+	}
+	l = m.Data.Size()
+	n += 1 + l + sovWebhooks(uint64(l))
 	return n
 }
 
@@ -982,6 +1498,124 @@ func sovWebhooks(x uint64) (n int) {
 }
 func sozWebhooks(x uint64) (n int) {
 	return sovWebhooks(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *ClientInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWebhooks
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ClientInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ClientInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWebhooks
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Id = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWebhooks
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Data.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWebhooks(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *ChannelOccupied) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -1153,125 +1787,6 @@ func (m *ChannelVacated) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *ClientInfo) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowWebhooks
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ClientInfo: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ClientInfo: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowWebhooks
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthWebhooks
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthWebhooks
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Id = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowWebhooks
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthWebhooks
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthWebhooks
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Info = append(m.Info[:0], dAtA[iNdEx:postIndex]...)
-			if m.Info == nil {
-				m.Info = []byte{}
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipWebhooks(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthWebhooks
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthWebhooks
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func (m *PresenceAdded) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1369,7 +1884,7 @@ func (m *PresenceAdded) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
 			}
-			var byteLen int
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowWebhooks
@@ -1379,24 +1894,26 @@ func (m *PresenceAdded) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= int(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLengthWebhooks
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + msglen
 			if postIndex < 0 {
 				return ErrInvalidLengthWebhooks
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Info = append(m.Info[:0], dAtA[iNdEx:postIndex]...)
 			if m.Info == nil {
-				m.Info = []byte{}
+				m.Info = &ClientInfo{}
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		default:
@@ -1520,7 +2037,7 @@ func (m *PresenceRemoved) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
 			}
-			var byteLen int
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowWebhooks
@@ -1530,24 +2047,26 @@ func (m *PresenceRemoved) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= int(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			if msglen < 0 {
 				return ErrInvalidLengthWebhooks
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + msglen
 			if postIndex < 0 {
 				return ErrInvalidLengthWebhooks
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Info = append(m.Info[:0], dAtA[iNdEx:postIndex]...)
 			if m.Info == nil {
-				m.Info = []byte{}
+				m.Info = &ClientInfo{}
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		default:
@@ -1696,14 +2215,121 @@ func (m *Publication) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Data = append(m.Data[:0], dAtA[iNdEx:postIndex]...)
-			if m.Data == nil {
-				m.Data = []byte{}
+			if err := m.Data.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWebhooks
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Info == nil {
+				m.Info = &ClientInfo{}
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWebhooks(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthWebhooks
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Hook) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWebhooks
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Hook: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Hook: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Event", wireType)
+			}
+			m.Event = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWebhooks
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Event |= Event(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -1730,9 +2356,8 @@ func (m *Publication) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Info = append(m.Info[:0], dAtA[iNdEx:postIndex]...)
-			if m.Info == nil {
-				m.Info = []byte{}
+			if err := m.Data.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
 			iNdEx = postIndex
 		default:

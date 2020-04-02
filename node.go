@@ -14,14 +14,17 @@ import (
 
 // Node ...
 type Node struct {
-	mu         sync.RWMutex
-	uid        string
-	startedAt  int64
-	broker     *Broker
-	hub        *Hub
-	webhook    *webhookManager
-	config     Config
-	nodes      *nodeRegistry
+	mu        sync.RWMutex
+	uid       string
+	startedAt int64
+
+	broker  *Broker
+	hub     *Hub
+	webhook *webhookManager
+	config  Config
+
+	nodes *nodeRegistry
+
 	shutdown   bool
 	shutdownCh chan struct{}
 	logger     *logger

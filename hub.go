@@ -3,10 +3,8 @@ package core
 import (
 	"context"
 	"github.com/sireax/core/internal/proto/clientproto"
-	"github.com/sireax/core/internal/proto/webhooks"
 	"log"
 	"sync"
-	"time"
 )
 
 // Hub struct contains all data and structs of clients,channels etc.
@@ -67,44 +65,6 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 
 	app.Stats.IncrementMsgs()
 
-	//////////////
-	// webhooks //
-
-	go func() {
-
-		pubWh := webhooks.Publication{
-			Channel: channelName,
-			Data:    pub.Data,
-		}
-		pubWhBytes, _ := pubWh.Marshal()
-
-		for _, webhook := range app.Options.Webhooks {
-
-			if !webhook.Publication {
-				continue
-			}
-
-			wh := webhooks.Webhook{
-				Id:        0,
-				Timestamp: time.Now().Unix(),
-				Signature: "",
-				Event:     webhooks.Event_PUBLICATION,
-				AppId:     app.ID,
-				Url:       webhook.Url,
-				Data:      pubWhBytes,
-			}
-
-			whBytes, _ := wh.Marshal()
-
-			r := webhookRequest{
-				data: whBytes,
-			}
-
-			h.node.webhook.Enqueue(r)
-		}
-
-	}()
-
 }
 
 func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
@@ -146,40 +106,6 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 
 	app.Stats.IncrementJoin()
 
-	//////////////
-	// webhooks //
-
-	go func() {
-		joinWh := webhooks.PresenceAdded{
-			Channel: join.Channel,
-		}
-
-		joinWhData, _ := joinWh.Marshal()
-
-		for _, webhook := range app.Options.Webhooks {
-
-			if !webhook.Presence {
-				continue
-			}
-
-			wh := webhooks.Webhook{
-				Id:        0,
-				Signature: "",
-				Event:     webhooks.Event_PRESENCE_ADDED,
-				AppId:     app.ID,
-				Url:       webhook.Url,
-				Data:      joinWhData,
-			}
-
-			whData, _ := wh.Marshal()
-
-			h.node.webhook.Enqueue(webhookRequest{
-				data: whData,
-			})
-
-		}
-
-	}()
 }
 
 func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
@@ -220,42 +146,6 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting leave", map[string]interface{}{"app": appKey, "channel": leave.Channel}))
 
 	app.Stats.IncrementLeave()
-
-	//////////////
-	// webhooks //
-
-	go func() {
-		leaveWh := webhooks.PresenceRemoved{
-			Channel: leave.Channel,
-		}
-
-		leaveWhData, _ := leaveWh.Marshal()
-		for _, webhook := range app.Options.Webhooks {
-
-			if !webhook.Presence {
-				continue
-			}
-
-			wh := webhooks.Webhook{
-				Id:        0,
-				Signature: "",
-				Event:     webhooks.Event_PRESENCE_REMOVED,
-				AppId:     app.ID,
-				Url:       webhook.Url,
-				Data:      leaveWhData,
-			}
-
-			whData, _ := wh.Marshal()
-
-			whR := webhookRequest{
-				data: whData,
-			}
-
-			h.node.webhook.Enqueue(whR)
-			h.node.logger.log(NewLogEntry(LogLevelInfo, "just enqueued webhook!"))
-		}
-
-	}()
 
 }
 

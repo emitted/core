@@ -2,6 +2,11 @@ syntax = "proto3";
 
 package webhooks;
 
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.equal_all) = true;
+option (gogoproto.populate_all) = true;
+option (gogoproto.testgen_all) = true;
 
 enum Event {
     CHANNEL_OCCUPIED = 0;
@@ -11,36 +16,41 @@ enum Event {
     PUBLICATION = 4;
 }
 
+message ClientInfo {
+    string id = 1 [(gogoproto.jsontag) = "id"];
+    bytes data = 2 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "data,omitempty", (gogoproto.nullable) = false];
+}
+
 message ChannelOccupied {
-    string channel = 1;
+    string channel = 1 [(gogoproto.jsontag) = "channel"];
 }
 
 message ChannelVacated {
-    string channel = 1;
-}
-
-message ClientInfo {
-    string id = 1;
-    bytes  info = 2;
+    string channel = 1 [(gogoproto.jsontag) = "channel"];
 }
 
 message PresenceAdded {
-    string channel = 1;
-    string uid = 2;
-    bytes info = 3;
+    string channel = 1 [(gogoproto.jsontag) = "channel"];
+    string uid = 2 [(gogoproto.jsontag) = "uid"];
+    ClientInfo info = 3 [(gogoproto.jsontag) = "info"];
 }
 
 message PresenceRemoved {
-    string channel = 1;
-    string uid = 2;
-    bytes info = 3;
+    string channel = 1 [(gogoproto.jsontag) = "channel"];
+    string uid = 2 [(gogoproto.jsontag) = "uid"];
+    ClientInfo info = 3 [(gogoproto.jsontag) = "info"];
 }
 
 message Publication {
-    string channel = 1;
-    string uid = 2;
-    bytes data = 3;
-    bytes info = 4;
+    string channel = 1 [(gogoproto.jsontag) = "channel"];
+    string uid = 2 [(gogoproto.jsontag) = "uid"];
+    bytes data = 3 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "data,omitempty", (gogoproto.nullable) = false];
+    ClientInfo info = 4 [(gogoproto.jsontag) = "info"];
+}
+
+message Hook {
+    Event event = 1;
+    bytes data = 2 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "data,omitempty", (gogoproto.nullable) = false];
 }
 
 message Webhook {

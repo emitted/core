@@ -28,7 +28,7 @@ type webhookConfig struct {
 var DefaultWebhookConfig = webhookConfig{
 	protocol:  "tcp",
 	address:   "localhost:9092",
-	topic:     "emitted-channels-webhook",
+	topic:     "emitted-server-webhooks",
 	partition: 0,
 }
 
@@ -53,10 +53,10 @@ func NewWebhookManager(node *Node, config webhookConfig) *webhookManager {
 func (w *webhookManager) Run() error {
 
 	config := sarama.NewConfig()
-	config.Producer.Compression = sarama.CompressionSnappy
-	config.Producer.Timeout = time.Second * 5
-	config.Producer.Return.Successes = true
-	config.Producer.Return.Errors = true
+	//config.Producer.Compression = sarama.CompressionSnappy
+	//config.Producer.Timeout = time.Second * 5
+	//config.Producer.Return.Successes = true
+	//config.Producer.Return.Errors = true
 
 	producer, err := sarama.NewAsyncProducer([]string{"localhost:9092"}, config)
 	if err != nil {
@@ -65,9 +65,7 @@ func (w *webhookManager) Run() error {
 
 	w.producer = producer
 
-	go runForever(func() {
-		w.runProducePipeline()
-	})
+	go w.runProducePipeline()
 
 	w.node.logger.log(newLogEntry(LogLevelInfo, "webhook dispatcher has been started"))
 
@@ -92,14 +90,19 @@ func (w *webhookManager) runProducePipeline() {
 		for {
 			select {
 			case <-ticker.C:
+
 				w.producer.Input() <- pingMsg
 
 			case r := <-w.pubCh:
 
-				w.producer.Input() <- &sarama.ProducerMessage{
+				msg := &sarama.ProducerMessage{
 					Topic:     "emitted-server-webhooks",
 					Value:     sarama.ByteEncoder(r.data),
 					Timestamp: time.Now(),
+				}
+
+				select {
+				case w.producer.Input() <- msg:
 				}
 
 			}
@@ -119,6 +122,7 @@ func (w *webhookManager) Enqueue(wh webhookRequest) error {
 	select {
 	case w.pubCh <- wh:
 	default:
+
 	}
 
 	return nil
