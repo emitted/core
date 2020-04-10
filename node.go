@@ -189,8 +189,12 @@ func (n *Node) GetPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return n.broker.GetPresence(ch, uid)
 }
 
-func (n *Node) UpdateAppStats(app string, stats AppStats) error {
+func (n *Node) UpdateAppStats(app string, stats *AppStats) error {
 	return n.broker.UpdateStats(app, stats)
+}
+
+func (n *Node) AppStats(secret string) (map[string]string, error) {
+	return n.broker.AppStats(secret)
 }
 
 func (n *Node) Channels(appSec string) ([]string, error) {

@@ -198,7 +198,6 @@ func (c *Client) unsubscribeForce(ch string) {
 			if err != nil {
 				c.node.logger.log(NewLogEntry(LogLevelError, "error unsubscribing from channel", map[string]interface{}{"channel": ch, "error": err.Error()}))
 			}
-			return
 		}
 
 		var clientInfo *clientproto.ClientInfo
@@ -842,7 +841,7 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 		}
 		leaveWh := webhooks.PresenceRemoved{
 			Channel: p.Channel,
-			Uid:     c.uid,
+			Uid:     uid,
 			Info:    &info,
 		}
 

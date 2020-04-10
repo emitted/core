@@ -92,7 +92,6 @@ func (t *websocketTransport) Close(disconnect *Disconnect) error {
 		t.mu.Unlock()
 	}
 	t.closed = true
-	close(t.closeCh)
 	t.mu.Unlock()
 
 	if disconnect != nil {
@@ -267,23 +266,40 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 		client.Connect(app)
 
+		counter := 0
+
+		go func() {
+			resetter := time.NewTicker(time.Second)
+			for {
+				select {
+				case <-closeCh:
+					resetter.Stop()
+				case <-resetter.C:
+					counter = 0
+				}
+			}
+		}()
+
 		defer func() {
+			close(closeCh)
 			err := client.Close(nil)
 			if err != nil {
 				client.node.logger.log(newLogEntry(LogLevelError, "error closing client"))
 			}
 		}()
 
-		//rl := ratelimit.New(10)
-
 		for {
 
-			//rl.Take()
+			if counter >= 10 {
+				continue
+			}
 
 			_, data, err := conn.ReadMessage()
 			if err != nil {
 				return
 			}
+
+			counter++
 
 			client.Handle(data)
 

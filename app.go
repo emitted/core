@@ -158,7 +158,7 @@ func (app *App) runSync() {
 	for {
 		select {
 		case <-ticker.C:
-			err := app.node.UpdateAppStats(app.Secret, app.Stats)
+			err := app.node.UpdateAppStats(app.Secret, &app.Stats)
 			if err != nil {
 				app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"error": err.Error()}))
 			}
