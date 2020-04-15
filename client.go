@@ -55,7 +55,7 @@ func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, er
 			err := client.transport.Write(data)
 			if err != nil {
 				client.Close(DisconnectWriteError)
-				client.node.logger.log(NewLogEntry(LogLevelError, "error writing to clientproto", map[string]interface{}{"clientproto": client.uid, "error": err.Error()}))
+				client.node.logger.log(NewLogEntry(LogLevelError, "error writing to client", map[string]interface{}{"clientproto": client.uid, "error": err.Error()}))
 			}
 			return nil
 		},
@@ -64,14 +64,14 @@ func NewClient(n *Node, ctx context.Context, t *websocketTransport) (*Client, er
 				err := client.transport.Write(payload)
 				if err != nil {
 					client.Close(DisconnectWriteError)
-					client.node.logger.log(NewLogEntry(LogLevelError, "error writing to clientproto", map[string]interface{}{"clientproto": client.uid, "error": err.Error()}))
+					client.node.logger.log(NewLogEntry(LogLevelError, "error writing to client", map[string]interface{}{"clientproto": client.uid, "error": err.Error()}))
 				}
 			}
 			return nil
 		},
 	}
 
-	// Setting clientproto's message producer
+	// Setting client's message producer
 	client.messageWriter = newWriter(messageWriterConf)
 
 	if !client.authenticated {
@@ -107,8 +107,11 @@ func (c *Client) CloseUnauthenticated() {
 	c.mu.RUnlock()
 
 	if !auth {
-		c.node.logger.log(NewLogEntry(LogLevelDebug, "closing unauthenticated clientproto", map[string]interface{}{"clientproto": c.uid}))
-		c.Close(DisconnectStale)
+		c.node.logger.log(NewLogEntry(LogLevelDebug, "closing unauthenticated client", map[string]interface{}{"client": c.uid}))
+		err := c.Close(DisconnectStale)
+		if err != nil {
+			c.node.logger.log(NewLogEntry(LogLevelError, "error closing client", map[string]interface{}{"client": c.uid, "error": err.Error()}))
+		}
 	}
 
 }
@@ -121,20 +124,22 @@ func (c *Client) Connect(app *App) {
 
 	app.mu.Lock()
 	app.Clients[c.uid] = c
+	app.Stats.Connections++
 	app.mu.Unlock()
 
-	app.Stats.IncrementConns()
+	numClientsGauge.Inc()
 }
 
 func (c *Client) Disconnect() {
 
 	c.app.mu.Lock()
 	delete(c.app.Clients, c.uid)
+	c.app.Stats.Connections--
 	c.app.mu.Unlock()
 
-	c.app.Stats.DecrementConns()
+	numClientsGauge.Dec()
 
-	if len(c.app.Channels) == 0 && c.app.Stats.getConns() == 0 {
+	if len(c.app.Channels) == 0 && c.app.Stats.Connections == 0 {
 		delete(c.node.hub.apps, c.app.Key)
 	}
 
@@ -396,7 +401,7 @@ type replyWriter struct {
 
 func (c *Client) canConnect() bool {
 	c.mu.RLock()
-	can := c.app.Stats.Connections < c.app.MaxConnections && !c.app.shutdown
+	can := c.app.Stats.Connections < c.app.MaxConnections && !c.app.shutdown && len(c.channels) <= 100
 	c.mu.RUnlock()
 
 	return can
@@ -597,7 +602,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	switch getChannelType(channel) {
 	case "private":
 
-		signature := generateSignature(appSec, appKey, uid, channel)
+		signature := generateSignature(appKey, uid, channel)
 
 		ok := verifySignature(signature, p.Signature)
 		if !ok {
@@ -612,18 +617,28 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	case "presence":
 
-		//signature := generateSignature(appSec, appKey, uid, p.Channel)
-		//
-		//ok := verifySignature(signature, p.Signature)
-		//if !ok {
-		//	err := rw.write(&clientproto.Reply{
-		//		Error: ErrorInvalidSignature,
-		//	})
-		//	if err != nil {
-		//		return DisconnectWriteError
-		//	}
-		//	return nil
-		//}
+		data, err := p.Data.Marshal()
+		if err != nil {
+			err := rw.write(&clientproto.Reply{
+				Error: ErrorBadRequest,
+			})
+			if err != nil {
+				return DisconnectWriteError
+			}
+			return nil
+		}
+		signature := generatePresenceSignature(appKey, uid, p.Channel, data)
+
+		ok := verifySignature(signature, p.Signature)
+		if !ok {
+			err := rw.write(&clientproto.Reply{
+				Error: ErrorInvalidSignature,
+			})
+			if err != nil {
+				return DisconnectWriteError
+			}
+			return nil
+		}
 
 		c.node.logger.log(NewLogEntry(LogLevelDebug, "presence from client", map[string]interface{}{"presence": p.Data}))
 

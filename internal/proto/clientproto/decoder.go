@@ -6,20 +6,20 @@ import (
 	"log"
 )
 
-// PushDecoder ...
-type PushDecoder interface {
-	Decode([]byte) (*Push, error)
+// EventDecoder ...
+type EventDecoder interface {
+	Decode([]byte) (*Event, error)
 	DecodePublication([]byte) (*Publication, error)
 	DecodeJoin([]byte) (*Join, error)
 	DecodeLeave([]byte) (*Leave, error)
 }
 
-type ProtobufPushDecoder struct {
+type ProtobufEventDecoder struct {
 }
 
 // Decode ...
-func (e *ProtobufPushDecoder) Decode(data []byte) (*Push, error) {
-	var m Push
+func (e *ProtobufEventDecoder) Decode(data []byte) (*Event, error) {
+	var m Event
 	err := m.Unmarshal(data)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func (e *ProtobufPushDecoder) Decode(data []byte) (*Push, error) {
 }
 
 // DecodePublication ...
-func (e *ProtobufPushDecoder) DecodePublication(data []byte) (*Publication, error) {
+func (e *ProtobufEventDecoder) DecodePublication(data []byte) (*Publication, error) {
 	var m Publication
 	err := m.Unmarshal(data)
 	if err != nil {
@@ -38,7 +38,7 @@ func (e *ProtobufPushDecoder) DecodePublication(data []byte) (*Publication, erro
 }
 
 // DecodeJoin ...
-func (e *ProtobufPushDecoder) DecodeJoin(data []byte) (*Join, error) {
+func (e *ProtobufEventDecoder) DecodeJoin(data []byte) (*Join, error) {
 	var m Join
 	err := m.Unmarshal(data)
 	if err != nil {
@@ -48,7 +48,7 @@ func (e *ProtobufPushDecoder) DecodeJoin(data []byte) (*Join, error) {
 }
 
 // DecodeLeave  ...
-func (e *ProtobufPushDecoder) DecodeLeave(data []byte) (*Leave, error) {
+func (e *ProtobufEventDecoder) DecodeLeave(data []byte) (*Leave, error) {
 	var m Leave
 	err := m.Unmarshal(data)
 	if err != nil {

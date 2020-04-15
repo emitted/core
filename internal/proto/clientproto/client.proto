@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package clientproto;
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-
 enum MethodType {
     CONNECT = 0;
     SUBSCRIBE = 1;
@@ -30,15 +28,15 @@ message Reply {
 }
 
 
-enum PushType {
+enum EventType {
     PUBLICATION = 0;
     JOIN = 1;
     LEAVE = 2;
     SERVICE = 4;
 }
 
-message Push {
-    PushType type = 1;
+message Event {
+    EventType type = 1;
     bytes data = 2;
 }
 

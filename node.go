@@ -53,7 +53,7 @@ func (n *Node) NotifyShutdown() chan struct{} {
 }
 
 // NewNode ...
-func NewNode(c Config, brokerConfig *BrokerConfig) *Node {
+func NewNode(c Config, brokerConfig *BrokerConfig, kafkaConfig KafkaConfig) *Node {
 	uid := uuid.Must(uuid.NewV4()).String()
 
 	subLocks := make(map[int]*sync.Mutex, numSubLocks)
@@ -88,7 +88,8 @@ func NewNode(c Config, brokerConfig *BrokerConfig) *Node {
 	n.broker = broker
 
 	n.hub = NewHub(n)
-	n.webhook = NewWebhookManager(n, DefaultWebhookConfig)
+
+	n.webhook = NewWebhookManager(n, kafkaConfig)
 
 	return n
 }
@@ -118,8 +119,7 @@ func (n *Node) updateMetrics() {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			//n.metrics.channels = n.hub.numConnections
-			//n.metrics.clients = n.hub.numClients
+			//n.updateGauges()
 		}
 	}
 }
@@ -209,9 +209,7 @@ func (n *Node) pubNode() error {
 		UID:     n.uid,
 		Name:    n.config.Name,
 		Version: n.config.Version,
-		//NumClients:  uint32(n.hub.NumClients()),
-		//NumChannels: uint32(n.hub.NumChannels()),
-		Uptime: uint32(time.Now().Unix() - n.startedAt),
+		Uptime:  uint32(time.Now().Unix() - n.startedAt),
 	}
 
 	n.metricsMu.Lock()
@@ -248,13 +246,13 @@ func (n *Node) nodeCmd(node *nodeproto.Node) error {
 }
 
 func (n *Node) publishNode(cmd *nodeproto.Command) error {
-	//messagesSentCountControl.Inc()
-	_, err := n.protoEncoder.EncodeCommand(cmd)
+	messagesSentCountControl.Inc()
+	data, err := n.protoEncoder.EncodeCommand(cmd)
 	if err != nil {
 		return err
 	}
-	//return n.broker.PublishNode(data)
-	return nil
+
+	return n.broker.PublishNode(data)
 }
 
 func (n *Node) getMetrics(metrics eagle.Metrics) *nodeproto.Metrics {

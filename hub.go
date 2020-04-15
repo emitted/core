@@ -50,8 +50,8 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 		//	todo
 	}
 
-	push := &clientproto.Push{
-		Type: clientproto.PushType_PUBLICATION,
+	push := &clientproto.Event{
+		Type: clientproto.EventType_PUBLICATION,
 		Data: data,
 	}
 
@@ -63,7 +63,7 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 
 	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting publication", map[string]interface{}{"app": appKey, "channel": channelName}))
 
-	app.Stats.IncrementMsgs()
+	app.Stats.Messages++
 
 }
 
@@ -82,8 +82,8 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling join", map[string]interface{}{"error": err.Error()}))
 	}
 
-	push := &clientproto.Push{
-		Type: clientproto.PushType_JOIN,
+	push := &clientproto.Event{
+		Type: clientproto.EventType_JOIN,
 		Data: data,
 	}
 
@@ -104,7 +104,8 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 
 	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting join", map[string]interface{}{"app": appKey, "channel": join.Channel}))
 
-	app.Stats.IncrementJoin()
+	app.Stats.Join++
+	//	todo
 
 }
 
@@ -123,8 +124,8 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling leave", map[string]interface{}{"error": err.Error()}))
 	}
 
-	push := &clientproto.Push{
-		Type: clientproto.PushType_LEAVE,
+	push := &clientproto.Event{
+		Type: clientproto.EventType_LEAVE,
 		Data: data,
 	}
 
@@ -145,7 +146,7 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 
 	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting leave", map[string]interface{}{"app": appKey, "channel": leave.Channel}))
 
-	app.Stats.IncrementLeave()
+	app.Stats.Leave++
 
 }
 

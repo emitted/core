@@ -18,30 +18,32 @@ const (
 	WebhookEventPublication     = webhooks.Event_PUBLICATION
 )
 
-type webhookConfig struct {
-	protocol, address, topic string
-	partition                int
+type KafkaConfig struct {
+	Protocol, Address, Topic string
+	Partition                int
 
-	writeTimeout int
+	WriteTimeout int
 }
 
-var DefaultWebhookConfig = webhookConfig{
-	protocol:  "tcp",
-	address:   "localhost:9092",
-	topic:     "emitted-server-webhooks",
-	partition: 0,
+var DefaultKafkaConfig = KafkaConfig{
+	Protocol:  "tcp",
+	Address:   "localhost:9092",
+	Topic:     "emitted-server-webhooks",
+	Partition: 0,
+
+	WriteTimeout: 1,
 }
 
 type webhookManager struct {
 	node   *Node
-	config webhookConfig
+	config KafkaConfig
 
 	pubCh chan webhookRequest
 
 	producer sarama.AsyncProducer
 }
 
-func NewWebhookManager(node *Node, config webhookConfig) *webhookManager {
+func NewWebhookManager(node *Node, config KafkaConfig) *webhookManager {
 	return &webhookManager{
 		node:   node,
 		config: config,
@@ -53,12 +55,13 @@ func NewWebhookManager(node *Node, config webhookConfig) *webhookManager {
 func (w *webhookManager) Run() error {
 
 	config := sarama.NewConfig()
-	//config.Producer.Compression = sarama.CompressionSnappy
-	//config.Producer.Timeout = time.Second * 5
-	//config.Producer.Return.Successes = true
-	//config.Producer.Return.Errors = true
 
-	producer, err := sarama.NewAsyncProducer([]string{"localhost:9092"}, config)
+	config.Producer.Compression = sarama.CompressionSnappy
+	config.Producer.Timeout = 5 * time.Second
+	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
+
+	producer, err := sarama.NewAsyncProducer([]string{w.config.Address}, config)
 	if err != nil {
 		return err
 	}

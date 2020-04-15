@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"github.com/sireax/core/internal/proto/clientproto"
 	"github.com/sireax/core/internal/timers"
 	"log"
@@ -129,6 +130,18 @@ func (b *Broker) Run() error {
 
 //////////////////////
 ////// REDIRECTS /////
+
+func (b *Broker) PublishNode(data []byte) error {
+	var err error
+	for _, shard := range b.shards {
+		err = shard.PublishNode(data)
+		if err != nil {
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("publish node error, all shards failed: last error: %v", err)
+}
 
 func (b *Broker) Subscribe(chId string) error {
 	return b.getShard(chId).Subscribe([]string{chId})
@@ -709,7 +722,7 @@ func (s *shard) runPubSub() {
 					case "ping":
 					default:
 
-						var push clientproto.Push
+						var push clientproto.Event
 						err := push.Unmarshal(message.Data)
 						if err != nil {
 							s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling push from msg broker", map[string]interface{}{"channel": message.Channel, "error": err.Error()}))
@@ -718,7 +731,7 @@ func (s *shard) runPubSub() {
 						appKey, channelName := parseChId(message.Channel)
 
 						switch push.Type {
-						case clientproto.PushType_PUBLICATION:
+						case clientproto.EventType_PUBLICATION:
 
 							var pub clientproto.Publication
 							err := pub.Unmarshal(push.Data)
@@ -728,7 +741,7 @@ func (s *shard) runPubSub() {
 
 							s.node.hub.BroadcastPublication(appKey, channelName, &pub)
 
-						case clientproto.PushType_JOIN:
+						case clientproto.EventType_JOIN:
 
 							var join clientproto.Join
 							err := join.Unmarshal(push.Data)
@@ -738,7 +751,7 @@ func (s *shard) runPubSub() {
 
 							s.node.hub.BroadcastJoin(appKey, &join)
 
-						case clientproto.PushType_LEAVE:
+						case clientproto.EventType_LEAVE:
 
 							var leave clientproto.Leave
 							err := leave.Unmarshal(push.Data)
@@ -1056,8 +1069,8 @@ func (s *shard) Publish(chId string, publication *clientproto.Publication) error
 		return err
 	}
 
-	packet := &clientproto.Push{
-		Type: clientproto.PushType_PUBLICATION,
+	packet := &clientproto.Event{
+		Type: clientproto.EventType_PUBLICATION,
 		Data: bytes,
 	}
 
@@ -1083,6 +1096,8 @@ func (s *shard) Publish(chId string, publication *clientproto.Publication) error
 			return RedisWriteTimeoutError
 		}
 	}
+
+	messagesSentCountPublication.Inc()
 
 	return <-eChan
 }
@@ -1095,8 +1110,8 @@ func (s *shard) PublishJoin(chId string, join *clientproto.Join) error {
 		return err
 	}
 
-	packet := &clientproto.Push{
-		Type: clientproto.PushType_JOIN,
+	packet := &clientproto.Event{
+		Type: clientproto.EventType_JOIN,
 		Data: bytes,
 	}
 
@@ -1123,6 +1138,8 @@ func (s *shard) PublishJoin(chId string, join *clientproto.Join) error {
 		}
 	}
 
+	messagesSentCountJoin.Inc()
+
 	return <-eChan
 }
 
@@ -1134,8 +1151,8 @@ func (s *shard) PublishLeave(chId string, leave *clientproto.Leave) error {
 		return err
 	}
 
-	packet := &clientproto.Push{
-		Type: clientproto.PushType_LEAVE,
+	packet := &clientproto.Event{
+		Type: clientproto.EventType_LEAVE,
 		Data: bytes,
 	}
 
@@ -1158,6 +1175,9 @@ func (s *shard) PublishLeave(chId string, leave *clientproto.Leave) error {
 			return errors.New("redis timeout")
 		}
 	}
+
+	messagesSentCountLeave.Inc()
+
 	return <-eChan
 }
 

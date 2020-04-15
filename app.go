@@ -15,34 +15,6 @@ type AppStats struct {
 	Leave       int
 }
 
-func (s *AppStats) getConns() int {
-	return s.Connections
-}
-
-func (s *AppStats) getMsgs() int {
-	return s.Messages
-}
-
-func (s *AppStats) IncrementConns() {
-	s.Connections++
-}
-
-func (s *AppStats) DecrementConns() {
-	s.Connections--
-}
-
-func (s *AppStats) IncrementMsgs() {
-	s.Messages++
-}
-
-func (s *AppStats) IncrementJoin() {
-	s.Join++
-}
-
-func (s *AppStats) IncrementLeave() {
-	s.Leave++
-}
-
 type App struct {
 	ID     string
 	Key    string
@@ -69,11 +41,21 @@ type App struct {
 }
 
 func (app *App) CanHaveNewConns() bool {
-	if app.Stats.getConns() < app.MaxConnections {
+	if app.Stats.Connections < app.MaxConnections {
 		return true
 	}
 
 	return false
+}
+
+func (app *App) Destroy() {
+	app.mu.Lock()
+	if app.shutdown {
+		app.mu.Unlock()
+		return
+	}
+	app.shutdown = true
+
 }
 
 func (app *App) Shutdown() {
@@ -109,6 +91,7 @@ func (app *App) Shutdown() {
 func (app *App) CheckDue() {
 
 }
+
 func GetApp(n *Node, secret string) (*App, error) {
 	app, ok := n.hub.apps[secret]
 	if !ok {
@@ -158,7 +141,12 @@ func (app *App) runSync() {
 	for {
 		select {
 		case <-ticker.C:
-			err := app.node.UpdateAppStats(app.Secret, &app.Stats)
+
+			app.mu.Lock()
+			snapshot := &app.Stats
+			app.mu.Unlock()
+
+			err := app.node.UpdateAppStats(app.Secret, snapshot)
 			if err != nil {
 				app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"error": err.Error()}))
 			}

@@ -9,69 +9,69 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-// PushEncoder ...
-type PushEncoder interface {
-	Encode(*Push) ([]byte, error)
+// EventEncoder ...
+type EventEncoder interface {
+	Encode(*Event) ([]byte, error)
 	EncodePublication(*Publication) ([]byte, error)
 	EncodeJoin(*Join) ([]byte, error)
 	EncodeLeave(*Leave) ([]byte, error)
 }
 
-// JSONPushEncoder ...
-type JSONPushEncoder struct {
+// JSONEventEncoder ...
+type JSONEventEncoder struct {
 }
 
-// NewJSONPushEncoder ...
-func NewJSONPushEncoder() *JSONPushEncoder {
-	return &JSONPushEncoder{}
+// NewJSONEventEncoder ...
+func NewJSONEventEncoder() *JSONEventEncoder {
+	return &JSONEventEncoder{}
 }
 
 // Encode ...
-func (e *JSONPushEncoder) Encode(message *Push) ([]byte, error) {
+func (e *JSONEventEncoder) Encode(message *Event) ([]byte, error) {
 	return json.Marshal(message)
 }
 
 // EncodePublication ...
-func (e *JSONPushEncoder) EncodePublication(message *Publication) ([]byte, error) {
+func (e *JSONEventEncoder) EncodePublication(message *Publication) ([]byte, error) {
 	return json.Marshal(message)
 }
 
 // EncodeJoin ...
-func (e *JSONPushEncoder) EncodeJoin(message *Join) ([]byte, error) {
+func (e *JSONEventEncoder) EncodeJoin(message *Join) ([]byte, error) {
 	return json.Marshal(message)
 }
 
 // EncodeLeave ...
-func (e *JSONPushEncoder) EncodeLeave(message *Leave) ([]byte, error) {
+func (e *JSONEventEncoder) EncodeLeave(message *Leave) ([]byte, error) {
 	return json.Marshal(message)
 }
 
-// ProtobufPushEncoder ...
-type ProtobufPushEncoder struct {
+// ProtobufEventEncoder ...
+type ProtobufEventEncoder struct {
 }
 
-// NewProtobufPushEncoder ...
-func NewProtobufPushEncoder() *ProtobufPushEncoder {
-	return &ProtobufPushEncoder{}
+// NewProtobufEventEncoder ...
+func NewProtobufEventEncoder() *ProtobufEventEncoder {
+	return &ProtobufEventEncoder{}
 }
 
 // Encode ...
-func (e *ProtobufPushEncoder) Encode(message *Push) ([]byte, error) {
+func (e *ProtobufEventEncoder) Encode(message *Event) ([]byte, error) {
 	return message.Marshal()
 }
 
 // EncodePublication ...
-func (e *ProtobufPushEncoder) EncodePublication(message *Publication) ([]byte, error) {
+func (e *ProtobufEventEncoder) EncodePublication(message *Publication) ([]byte, error) {
 	return message.Marshal()
 }
 
 // EncodeJoin ...
-func (e *ProtobufPushEncoder) EncodeJoin(message *Join) ([]byte, error) {
+func (e *ProtobufEventEncoder) EncodeJoin(message *Join) ([]byte, error) {
 	return message.Marshal()
 }
 
 // EncodeLeave ...
-func (e *ProtobufPushEncoder) EncodeLeave(message *Leave) ([]byte, error) {
+func (e *ProtobufEventEncoder) EncodeLeave(message *Leave) ([]byte, error) {
 	return message.Marshal()
 }
 
