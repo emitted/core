@@ -12,8 +12,9 @@ enum MethodType {
 }
 
 message Command {
-    MethodType type = 1;
-    bytes data = 2;
+    uint32 id = 1;
+    MethodType type = 2;
+    bytes data = 3;
 }
 
 message Error {
@@ -84,8 +85,14 @@ enum ClientType {
 }
 
 message ConnectRequest {
-    ClientType client = 2;
-    string version = 3;
+    ClientType client = 1;
+    string version = 2;
+    bytes data = 3;
+}
+
+message ConnectResult {
+    string uid = 1;
+    int64 expires = 3;
     bytes data = 4;
 }
 
@@ -94,12 +101,6 @@ message PingRequest {
 
 message PingResult {
 
-}
-
-message ConnectResult {
-    string uid = 1;
-    int64 expires = 3;
-    bytes data = 4;
 }
 
 message SubscribeResult {

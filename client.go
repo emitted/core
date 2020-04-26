@@ -143,7 +143,7 @@ func (c *Client) Disconnect() {
 		delete(c.node.hub.apps, c.app.Key)
 	}
 
-	c.node.logger.log(NewLogEntry(LogLevelDebug, "clientproto has disconnected from app", map[string]interface{}{"clientproto": c.uid, "app": c.app.ID}))
+	c.node.logger.log(NewLogEntry(LogLevelDebug, "client has disconnected from app", map[string]interface{}{"clientproto": c.uid, "app": c.app.ID}))
 
 }
 
@@ -343,10 +343,14 @@ func (c *Client) Handle(data []byte) {
 				break
 			}
 			c.node.logger.log(NewLogEntry(LogLevelInfo, "empty clientproto request recieved", map[string]interface{}{"clientproto": c.uid}))
+			err := c.Close(DisconnectBadRequest)
+			if err != nil {
+				c.node.logger.log(NewLogEntry(LogLevelError, "error closing client", map[string]interface{}{"client": c.uid, "error": err.Error()}))
+			}
 			return
 		}
 		write := func(rep *clientproto.Reply) error {
-			rep.Id = 6346
+			rep.Id = cmd.Id
 			data, err := rep.Marshal()
 			if err != nil {
 				c.node.logger.log(NewLogEntry(LogLevelError, "error marshaling reply", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
