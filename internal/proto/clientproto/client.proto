@@ -76,7 +76,8 @@ message UnsubscribeRequest {
 
 message PublishRequest {
     string channel = 1;
-    bytes data = 2;
+    string topic = 2;
+    bytes data = 3;
 }
 
 enum ClientType {

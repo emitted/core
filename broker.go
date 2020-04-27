@@ -1024,6 +1024,7 @@ func (s *shard) Unsubscribe(channels []string) error {
 func (s *shard) handlePublish(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.PublishRequest) error {
 
 	pub := &clientproto.Publication{
+		Topic:   r.Topic,
 		Channel: r.Channel,
 		Data:    r.Data,
 		Info:    clientInfo,

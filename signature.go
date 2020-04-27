@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/rs/zerolog/log"
 	"strings"
 )
 
@@ -19,10 +20,12 @@ func generateSignature(key, uid, channel string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func generatePresenceSignature(key, uid, channel string, data []byte) string {
+func generatePresenceSignature(key, uid, channel, id string, data []byte) string {
 
-	signArray := []string{uid, channel, string(data)}
+	signArray := []string{uid, channel, id, string(data)}
 	sign := strings.Join(signArray, ":")
+
+	log.Debug().Msgf("received data to sign: %v", string(data))
 
 	h := hmac.New(sha256.New, []byte(key))
 	h.Write([]byte(sign))

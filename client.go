@@ -621,17 +621,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	case "presence":
 
-		data, err := p.Data.Marshal()
-		if err != nil {
-			err := rw.write(&clientproto.Reply{
-				Error: ErrorBadRequest,
-			})
-			if err != nil {
-				return DisconnectWriteError
-			}
-			return nil
-		}
-		signature := generatePresenceSignature(appKey, uid, p.Channel, data)
+		signature := generatePresenceSignature(appKey, uid, p.Channel, p.Data.Id, p.Data.Data)
 
 		ok := verifySignature(signature, p.Signature)
 		if !ok {
