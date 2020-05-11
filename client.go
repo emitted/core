@@ -320,6 +320,8 @@ func (c *Client) Close(disconnect *Disconnect) error {
 
 func (c *Client) Handle(data []byte) {
 
+	start := time.Now()
+
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -394,6 +396,8 @@ func (c *Client) Handle(data []byte) {
 	clientproto.PutCommandDecoder(decoder)
 	clientproto.PutReplyEncoder(encoder)
 
+	c.node.logger.log(NewLogEntry(LogLevelDebug, "command took "+time.Since(start).String()))
+
 	return
 
 }
@@ -405,10 +409,14 @@ type replyWriter struct {
 
 func (c *Client) canConnect() bool {
 	c.mu.RLock()
-	can := c.app.Stats.Connections < c.app.MaxConnections && !c.app.shutdown && len(c.channels) <= 100
+	can := (c.app.Stats.Connections < c.app.MaxConnections) && !c.app.shutdown
 	c.mu.RUnlock()
 
 	return can
+}
+
+func (c *Client) canSubscribe() bool {
+	return len(c.channels) < 100
 }
 
 func (c *Client) canPublish() bool {
@@ -416,7 +424,17 @@ func (c *Client) canPublish() bool {
 	can := c.app.Options.ClientPublications
 	c.mu.RUnlock()
 
-	return can
+	if can {
+		c.app.Stats.mu.Lock()
+		if c.app.Stats.Messages < c.app.MaxMessages {
+			c.app.Stats.mu.Unlock()
+			return true
+		}
+		c.app.Stats.mu.Unlock()
+		return false
+	}
+
+	return false
 }
 
 func (c *Client) HandleCommand(cmd *clientproto.Command, write func(reply *clientproto.Reply) error, flush func() error) *Disconnect {
@@ -474,15 +492,13 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 	}
 	c.mu.RUnlock()
 
-	if !c.canConnect() {
-		c.node.logger.log(NewLogEntry(LogLevelDebug, "max connections: "+string(c.app.MaxConnections)))
-		err := rw.write(&clientproto.Reply{
-			Error: ErrorConnectionLimitExceeded,
-		})
-		if err != nil {
-			return DisconnectWriteError
-		}
+	if c.app.checkDue() {
+		c.node.logger.log(NewLogEntry(LogLevelDebug, "client tried to connect to unpaid app"))
 
+		return DisconnectSubscriptionEnded
+	}
+
+	if !c.canConnect() {
 		return DisconnectLimitExceeded
 	}
 
@@ -518,7 +534,7 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 
 	c.mu.RUnlock()
 
-	c.node.logger.log(NewLogEntry(LogLevelDebug, "a clientproto connected", map[string]interface{}{"uid": c.uid, "app": c.app.ID, "clientproto": c.client, "version": c.version}))
+	c.node.logger.log(NewLogEntry(LogLevelDebug, "a client connected", map[string]interface{}{"uid": c.uid, "app": c.app.ID, "client": c.client, "version": c.version}))
 
 	expires := time.Now().Add(time.Hour).Unix()
 	res := &clientproto.ConnectResult{
@@ -551,13 +567,25 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 		return nil
 	}
+
+	if !c.canSubscribe() {
+		c.mu.RUnlock()
+		err := rw.write(&clientproto.Reply{
+			Error: ErrorChannelLimitExceeded,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+
+		return nil
+	}
 	c.mu.RUnlock()
 
 	var disconnect *Disconnect
 
 	p, err := clientproto.NewProtobufParamsDecoder().DecodeSubscribe(data)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling subscribe command", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling subscribe command", map[string]interface{}{"client": c.uid, "error": err.Error()}))
 		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
 		})
@@ -661,7 +689,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		}
 		err = c.node.broker.Subscribe(chId)
 		if err != nil {
-			c.node.logger.log(NewLogEntry(LogLevelError, "error subscribing broker to channel", map[string]interface{}{"channelID": chId, "clientproto": c.uid, "error": err.Error()}))
+			c.node.logger.log(NewLogEntry(LogLevelError, "error subscribing broker to channel", map[string]interface{}{"channelID": chId, "client": c.uid, "error": err.Error()}))
 		}
 	}
 
@@ -688,52 +716,56 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	// Webhooks
 	////////////
 
-	go func() {
+	if getChannelType(p.Channel) == "presence" {
 
-		var info webhooks.ClientInfo
+		go func() {
 
-		if p.Data != nil {
-			info = webhooks.ClientInfo{
-				Id:   p.Data.Id,
-				Data: p.Data.Data,
-			}
-		}
+			var info webhooks.ClientInfo
 
-		joinWh := webhooks.PresenceAdded{
-			Channel: p.Channel,
-			Uid:     uid,
-			Info:    &info,
-		}
-
-		joinWhData, _ := joinWh.Marshal()
-
-		for _, webhook := range c.app.Options.Webhooks {
-
-			if !webhook.Presence {
-				continue
+			if p.Data != nil {
+				info = webhooks.ClientInfo{
+					Id:   p.Data.Id,
+					Data: p.Data.Data,
+				}
 			}
 
-			wh := webhooks.Webhook{
-				Id:        0,
-				Signature: "",
-				Event:     webhooks.Event_PRESENCE_ADDED,
-				AppId:     c.app.ID,
-				Url:       webhook.Url,
-				Data:      joinWhData,
+			joinWh := webhooks.PresenceAdded{
+				Channel: p.Channel,
+				Uid:     uid,
+				Info:    &info,
 			}
 
-			whData, _ := wh.Marshal()
+			joinWhData, _ := joinWh.Marshal()
 
-			err := c.node.webhook.Enqueue(webhookRequest{
-				data: whData,
-			})
-			if err != nil {
-				c.node.logger.log(NewLogEntry(LogLevelError, "error enqueuing webhook", map[string]interface{}{"error": err.Error()}))
+			for _, webhook := range c.app.Options.Webhooks {
+
+				if !webhook.Presence {
+					continue
+				}
+
+				wh := webhooks.Webhook{
+					Id:        0,
+					Signature: "",
+					Event:     webhooks.Event_PRESENCE_ADDED,
+					AppId:     c.app.ID,
+					Url:       webhook.Url,
+					Data:      joinWhData,
+				}
+
+				whData, _ := wh.Marshal()
+
+				err := c.node.webhook.Enqueue(webhookRequest{
+					data: whData,
+				})
+				if err != nil {
+					c.node.logger.log(NewLogEntry(LogLevelError, "error enqueuing webhook", map[string]interface{}{"error": err.Error()}))
+				}
+
 			}
 
-		}
+		}()
 
-	}()
+	}
 
 	return disconnect
 }
@@ -758,7 +790,7 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	p, err := clientproto.NewProtobufParamsDecoder().DecodeUnsubscribe(data)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling unsubscribe command", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling unsubscribe command", map[string]interface{}{"client": c.uid, "error": err.Error()}))
 		return DisconnectBadRequest
 	}
 
@@ -918,7 +950,7 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 
 	p, err := clientproto.NewProtobufParamsDecoder().DecodePublish(data)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling publish command", map[string]interface{}{"clientproto": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelInfo, "error unmarshaling publish command", map[string]interface{}{"client": c.uid, "error": err.Error()}))
 		return DisconnectBadRequest
 	}
 
@@ -942,7 +974,7 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 	chId := makeChId(appSec, p.Channel)
 	err = c.node.broker.Publish(chId, clientInfo, p)
 	if err != nil {
-		c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling publication", map[string]interface{}{"channelID": chId, "clientproto": c.uid, "error": err.Error()}))
+		c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling publication", map[string]interface{}{"channelID": chId, "client": c.uid, "error": err.Error()}))
 	}
 
 	res := &clientproto.PublishResult{}
@@ -959,55 +991,57 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 	// Webhooks
 	////////////
 
-	go func() {
-
-		var info webhooks.ClientInfo
-
-		if clientInfo != nil {
-			info = webhooks.ClientInfo{
-				Id:   clientInfo.Id,
-				Data: clientInfo.Data,
-			}
-		}
-
-		pubWh := webhooks.Publication{
-			Channel: p.Channel,
-			Uid:     c.uid,
-			Data:    p.Data,
-			Info:    &info,
-		}
-
-		pubWhBytes, _ := pubWh.Marshal()
-
-		for _, webhook := range c.app.Options.Webhooks {
-
-			if !webhook.Publication {
-				continue
-			}
-
-			wh := webhooks.Webhook{
-				Id:        0,
-				Timestamp: time.Now().Unix(),
-				Signature: "",
-				Event:     webhooks.Event_PUBLICATION,
-				AppId:     c.app.ID,
-				Url:       webhook.Url,
-				Data:      pubWhBytes,
-			}
-
-			whBytes, _ := wh.Marshal()
-
-			r := webhookRequest{
-				data: whBytes,
-			}
-
-			err := c.node.webhook.Enqueue(r)
-			if err != nil {
-				c.node.logger.log(NewLogEntry(LogLevelError, "error enqueuing webhook", map[string]interface{}{"error": err.Error()}))
-			}
-		}
-
-	}()
+	//go func() {
+	//
+	//	var info webhooks.ClientInfo
+	//
+	//	if clientInfo != nil {
+	//		info = webhooks.ClientInfo{
+	//			Id:   clientInfo.Id,
+	//			Data: clientInfo.Data,
+	//		}
+	//	}
+	//
+	//	pubWh := webhooks.Publication{
+	//		Channel: p.Channel,
+	//		Uid:     c.uid,
+	//		Data:    p.Data,
+	//		Info:    &info,
+	//	}
+	//
+	//	pubWhBytes, _ := pubWh.Marshal()
+	//
+	//	for _, webhook := range c.app.Options.Webhooks {
+	//
+	//		if !webhook.Publication {
+	//			continue
+	//		}
+	//
+	//		wh := webhooks.Webhook{
+	//			Id:        0,
+	//			Timestamp: time.Now().Unix(),
+	//			Signature: "",
+	//			Event:     webhooks.Event_PUBLICATION,
+	//			AppId:     c.app.ID,
+	//			Url:       webhook.Url,
+	//			Data:      pubWhBytes,
+	//		}
+	//
+	//		c.node.logger.log(NewLogEntry(LogLevelDebug, "sending webhook", map[string]interface{}{"wh": wh}))
+	//
+	//		whBytes, _ := wh.Marshal()
+	//
+	//		r := webhookRequest{
+	//			data: whBytes,
+	//		}
+	//
+	//		err := c.node.webhook.Enqueue(r)
+	//		if err != nil {
+	//			c.node.logger.log(NewLogEntry(LogLevelError, "error enqueuing webhook", map[string]interface{}{"error": err.Error()}))
+	//		}
+	//
+	//	}
+	//}()
 
 	return disconnect
 }

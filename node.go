@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/FZambia/eagle"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sireax/core/internal/database"
 	"github.com/sireax/core/internal/proto/clientproto"
 	"github.com/sireax/core/internal/proto/nodeproto"
 	"github.com/sireax/core/internal/uuid"
@@ -102,6 +103,11 @@ func (n *Node) Run() error {
 	}
 
 	err = n.webhook.Run()
+	if err != nil {
+		return err
+	}
+
+	err = database.SetupSession()
 	if err != nil {
 		return err
 	}

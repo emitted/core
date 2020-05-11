@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/sireax/core/internal/proto/clientproto"
 	"github.com/sireax/core/internal/timers"
-	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -214,7 +213,6 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 	db := conf.DB
 
 	serverAddr := net.JoinHostPort(host, strconv.Itoa(port))
-	log.Println("server addr:" + serverAddr)
 
 	poolSize := defaultPoolSize
 
@@ -287,13 +285,14 @@ func (s *shard) channelsHashKey(secret string) string {
 }
 
 func (s *shard) addPresence(ch, uid string, clientInfo *clientproto.ClientInfo) error {
-	cInfoBytes, err := clientInfo.Marshal()
+
+	infoBytes, err := clientInfo.Marshal()
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error marshaling client info", map[string]interface{}{"error": err.Error()}))
 	}
 	hashKey := s.presenceHashKey(ch)
 
-	dr := newDataRequest(dataOpAddPresence, []interface{}{hashKey, uid, cInfoBytes})
+	dr := newDataRequest(dataOpAddPresence, []interface{}{hashKey, uid, infoBytes})
 	resp := s.getDataResponse(dr)
 
 	return resp.err
@@ -314,7 +313,7 @@ func (s *shard) presence(ch string) (map[string]*clientproto.ClientInfo, error) 
 	dr := newDataRequest(dataOpPresence, []interface{}{hashKey})
 	resp := s.getDataResponse(dr)
 
-	return s.mapStringClientInfo(resp.reply, nil)
+	return s.mapStringClientInfoId(resp.reply, nil)
 }
 
 func (s *shard) getPresence(ch, uid string) (*clientproto.ClientInfo, error) {
@@ -337,7 +336,10 @@ func (s *shard) getPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 func (s *shard) updateStats(app string, stats *AppStats) error {
 	hashKey := s.statsHashKey(app)
 
+	stats.mu.Lock()
 	dr := newDataRequest(dataOpUpdateStats, []interface{}{hashKey, "clients", stats.Connections, "messages", stats.Messages, "joins", stats.Join, "leaves", stats.Leave})
+	stats.mu.Unlock()
+
 	resp := s.getDataResponse(dr)
 
 	return resp.err
@@ -370,14 +372,14 @@ func (s *shard) appStats(secret string) (map[string]string, error) {
 	return s.mapStringStats(resp.reply, nil)
 }
 
-func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string]*clientproto.ClientInfo, error) {
+func (s *shard) mapStringClientInfoUid(reply interface{}, err error) (map[string]*clientproto.ClientInfo, error) {
 	values, err := redis.Values(reply, err)
 
 	if err != nil {
 		return nil, err
 	}
 	if len(values)%2 != 0 {
-		return nil, errors.New("mapStringClientInfo expects even number of values result")
+		return nil, errors.New("mapStringClientInfoUid expects even number of values result")
 	}
 
 	m := make(map[string]*clientproto.ClientInfo, len(values))
@@ -396,6 +398,36 @@ func (s *shard) mapStringClientInfo(reply interface{}, err error) (map[string]*c
 		}
 
 		m[string(key)] = &clientInfo
+	}
+
+	return m, nil
+}
+
+func (s *shard) mapStringClientInfoId(reply interface{}, err error) (map[string]*clientproto.ClientInfo, error) {
+	values, err := redis.Values(reply, err)
+
+	if err != nil {
+		return nil, err
+	}
+	if len(values)%2 != 0 {
+		return nil, errors.New("mapStringClientInfoUid expects even number of values result")
+	}
+
+	m := make(map[string]*clientproto.ClientInfo, len(values))
+
+	for i := 0; i < len(values); i += 2 {
+		value, okValue := values[i+1].([]byte)
+		if !okValue {
+			return nil, errors.New("scanMap key not a bulk string value")
+		}
+
+		var clientInfo clientproto.ClientInfo
+		err := clientInfo.Unmarshal(value)
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling client info", map[string]interface{}{"error": err.Error()}))
+		}
+
+		m[clientInfo.Id] = &clientInfo
 	}
 
 	return m, nil
@@ -476,8 +508,6 @@ func (b *Broker) getShard(channel string) *shard {
 
 func (s *shard) Run() error {
 
-	s.node.logger.log(NewLogEntry(LogLevelInfo, "pool: ", map[string]interface{}{"pool": s.pool}))
-
 	go runForever(func() {
 		s.runPublishPipeline()
 	})
@@ -557,7 +587,6 @@ func (s *shard) runPublishPipeline() {
 			prs = nil
 		}
 	}
-
 }
 
 func (s *shard) Channels(secret string) ([]string, error) {
@@ -1009,13 +1038,11 @@ func (s *shard) RunDataPipeline() {
 	}
 }
 
-// HandleSubscribe ...
 func (s *shard) Subscribe(channels []string) error {
 	sub := newSubRequest(channels, true)
 	return s.sendSubRequest(sub)
 }
 
-// HandleUnsubscribe ...
 func (s *shard) Unsubscribe(channels []string) error {
 	sub := newSubRequest(channels, false)
 	return s.sendSubRequest(sub)
@@ -1144,20 +1171,20 @@ func (s *shard) PublishJoin(chId string, join *clientproto.Join) error {
 	return <-eChan
 }
 
-func (s *shard) PublishLeave(chId string, leave *clientproto.Leave) error {
+func (s *shard) PublishLeave(chId string, l *clientproto.Leave) error {
 	eChan := make(chan error, 1)
 
-	bytes, err := leave.Marshal()
+	bytes, err := l.Marshal()
 	if err != nil {
 		return err
 	}
 
-	packet := &clientproto.Event{
+	event := &clientproto.Event{
 		Type: clientproto.EventType_LEAVE,
 		Data: bytes,
 	}
 
-	payload, _ := packet.Marshal()
+	payload, _ := event.Marshal()
 
 	pr := pubRequest{
 		chId: chId,

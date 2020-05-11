@@ -61,8 +61,6 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 		client.messageWriter.enqueue(payload)
 	}
 
-	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting publication", map[string]interface{}{"app": appKey, "channel": channelName}))
-
 	app.Stats.Messages++
 
 }

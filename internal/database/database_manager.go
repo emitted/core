@@ -2,7 +2,6 @@ package database
 
 import (
 	mgo "gopkg.in/mgo.v2"
-	"time"
 )
 
 const appsCollectionName = "apps"
@@ -11,16 +10,19 @@ const statsCollecitonsName = "appstats"
 var (
 	mgoSession   *mgo.Session
 	databaseName = "test"
-	pingInterval = time.Second
 )
 
-func getSession() *mgo.Session {
-	mgoSession, err := mgo.Dial("localhost")
-
+func SetupSession() error {
+	var err error
+	mgoSession, err = mgo.Dial("localhost")
 	if err != nil {
-		panic(err)
+		return err
 	}
 
+	return nil
+}
+
+func getSession() *mgo.Session {
 	return mgoSession.Clone()
 }
 

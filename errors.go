@@ -47,7 +47,7 @@ var (
 		Message: "limit exceeded",
 	}
 	// give more detailed information.
-	ErrorConnectionLimitExceeded = &clientproto.Error{
+	ErrorChannelLimitExceeded = &clientproto.Error{
 		Code:    108,
 		Message: "limit exceeded",
 	}

@@ -39,12 +39,6 @@ var (
 		Reason:    "expired",
 		Reconnect: true,
 	}
-	// DisconnectSubExpired sent when clientproto subscription expired.
-	DisconnectSubExpired = &Disconnect{
-		Code:      3006,
-		Reason:    "subscription expired",
-		Reconnect: true,
-	}
 	// DisconnectStale sent to close connection that did not become
 	// authenticated in configured interval after dialing.
 	DisconnectStale = &Disconnect{
@@ -52,25 +46,11 @@ var (
 		Reason:    "stale",
 		Reconnect: false,
 	}
-	// DisconnectSlow sent when clientproto can't read subMessages fast enough.
-	DisconnectSlow = &Disconnect{
-		Code:      3008,
-		Reason:    "slow",
-		Reconnect: true,
-	}
 	// DisconnectWriteError sent when an error occurred while writing to
 	// clientproto connection.
 	DisconnectWriteError = &Disconnect{
 		Code:      3009,
 		Reason:    "write error",
-		Reconnect: true,
-	}
-	// DisconnectInsufficientState sent when server detects wrong clientproto
-	// position in channel Publication stream. Disconnect allows clientproto
-	// to restore missed publications on reconnect.
-	DisconnectInsufficientState = &Disconnect{
-		Code:      3010,
-		Reason:    "insufficient state",
 		Reconnect: true,
 	}
 	// DisconnectForceReconnect sent when server forcely disconnects connection.
@@ -90,6 +70,12 @@ var (
 	DisconnectLimitExceeded = &Disconnect{
 		Code:      3013,
 		Reason:    "connections limit has been reached",
+		Reconnect: false,
+	}
+
+	DisconnectSubscriptionEnded = &Disconnect{
+		Code:      3014,
+		Reason:    "subscription to Emitted channels has ended",
 		Reconnect: false,
 	}
 )

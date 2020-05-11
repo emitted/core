@@ -1,6 +1,9 @@
 package database
 
-import "github.com/pkg/errors"
+import (
+	"github.com/pkg/errors"
+	"time"
+)
 
 type Webhook struct {
 	Url string `bson:"url"`
@@ -26,7 +29,7 @@ type App struct {
 
 	Options Options `bson:"options"`
 
-	DueDate int64 `bson:"due_date"`
+	Due time.Time `bson:"due"`
 }
 
 func (app *App) Validate() error {

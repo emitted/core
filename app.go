@@ -23,6 +23,8 @@ type App struct {
 	MaxConnections int
 	MaxMessages    int
 
+	Due time.Time
+
 	node *Node
 
 	mu sync.Mutex
@@ -30,8 +32,6 @@ type App struct {
 	Clients  map[string]*Client
 	Channels map[string]*Channel
 	Options  database.Options
-
-	statsMu sync.Mutex
 
 	Stats AppStats
 
@@ -65,14 +65,13 @@ func (app *App) Shutdown() {
 		return
 	}
 	app.shutdown = true
+	app.mu.Unlock()
 
 	channels := make(map[string]*Channel, len(app.Channels))
 
 	for name, channel := range app.Channels {
 		channels[name] = channel
 	}
-
-	app.mu.Unlock()
 
 	for name, channel := range channels {
 		chId := makeChId(app.Secret, name)
@@ -82,13 +81,9 @@ func (app *App) Shutdown() {
 		}
 
 		for _, client := range channel.Clients {
-			client.Close(DisconnectNormal)
+			client.Close(DisconnectSubscriptionEnded)
 		}
 	}
-
-}
-
-func (app *App) CheckDue() {
 
 }
 
@@ -121,6 +116,8 @@ func NewApp(n *Node, dbApp database.App) *App {
 		MaxConnections: dbApp.MaxConnections,
 		MaxMessages:    dbApp.MaxMessages,
 
+		Due: dbApp.Due,
+
 		Options: dbApp.Options,
 		Stats: AppStats{
 			Connections: 0,
@@ -130,12 +127,14 @@ func NewApp(n *Node, dbApp database.App) *App {
 
 	app.node = n
 
-	go app.runSync()
+	n.logger.log(NewLogEntry(LogLevelDebug, "shutdown due", map[string]interface{}{"due": app.Due.String()}))
+
+	go app.run()
 
 	return app
 }
 
-func (app *App) runSync() {
+func (app *App) run() {
 	ticker := time.NewTicker(time.Second * 10)
 
 	for {
@@ -146,6 +145,13 @@ func (app *App) runSync() {
 			snapshot := &app.Stats
 			app.mu.Unlock()
 
+			if !app.checkDue() {
+
+				ticker.Stop()
+				app.Shutdown()
+				return
+			}
+
 			err := app.node.UpdateAppStats(app.Secret, snapshot)
 			if err != nil {
 				app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"error": err.Error()}))
@@ -153,6 +159,10 @@ func (app *App) runSync() {
 		}
 	}
 
+}
+
+func (app *App) checkDue() bool {
+	return app.Due.Sub(time.Now()) > 0
 }
 
 func (app *App) addSub(ch string, c *Client) bool {

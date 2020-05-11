@@ -70,8 +70,6 @@ func (w *webhookManager) Run() error {
 
 	go w.runProducePipeline()
 
-	w.node.logger.log(newLogEntry(LogLevelInfo, "webhook dispatcher has been started"))
-
 	return nil
 }
 
@@ -83,18 +81,9 @@ func (w *webhookManager) runProducePipeline() {
 	default:
 	}
 
-	ticker := time.NewTicker(time.Second * 5)
-	pingMsg := &sarama.ProducerMessage{
-		Topic: "emitted-server-webhooks-ping",
-		Value: sarama.StringEncoder("PING"),
-	}
-
 	go func() {
 		for {
 			select {
-			case <-ticker.C:
-
-				w.producer.Input() <- pingMsg
 
 			case r := <-w.pubCh:
 
@@ -106,6 +95,7 @@ func (w *webhookManager) runProducePipeline() {
 
 				select {
 				case w.producer.Input() <- msg:
+					w.node.logger.log(NewLogEntry(LogLevelInfo, "producing webhook"))
 				}
 
 			}

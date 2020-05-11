@@ -63,11 +63,3 @@ func GetAppBySecret(secret string) App {
 
 	return app
 }
-
-func UpdateAppStats(key string, conns int, msgs int) error {
-	query := func(c *mgo.Collection) error {
-		return c.Update(bson.M{"key": key}, bson.M{"$set": bson.M{"conns": conns, "msgs": msgs}})
-	}
-
-	return executeQuery(statsCollecitonsName, query)
-}
