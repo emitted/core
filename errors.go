@@ -2,7 +2,7 @@ package core
 
 import (
 	"errors"
-	"github.com/sireax/core/internal/proto/clientproto"
+	"github.com/sireax/core/common/proto/clientproto"
 )
 
 var (

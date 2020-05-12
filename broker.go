@@ -3,8 +3,8 @@ package core
 import (
 	"errors"
 	"fmt"
-	"github.com/sireax/core/internal/proto/clientproto"
-	"github.com/sireax/core/internal/timers"
+	"github.com/sireax/core/common/proto/clientproto"
+	"github.com/sireax/core/common/timers"
 	"net"
 	"strconv"
 	"strings"

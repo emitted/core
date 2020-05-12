@@ -2,7 +2,7 @@ package core
 
 import (
 	"errors"
-	"github.com/sireax/core/internal/database"
+	"github.com/sireax/core/common/database"
 	"sync"
 	"time"
 )

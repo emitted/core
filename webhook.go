@@ -2,7 +2,7 @@ package core
 
 import (
 	"github.com/Shopify/sarama"
-	"github.com/sireax/core/internal/proto/webhooks"
+	"github.com/sireax/core/common/proto/webhooks"
 	"time"
 )
 
@@ -63,7 +63,7 @@ func (w *webhookManager) Run() error {
 
 	producer, err := sarama.NewAsyncProducer([]string{w.config.Address}, config)
 	if err != nil {
-		return err
+		return nil
 	}
 
 	w.producer = producer

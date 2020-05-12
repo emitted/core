@@ -2,9 +2,9 @@ package core
 
 import (
 	"context"
-	"github.com/sireax/core/internal/proto/clientproto"
-	"github.com/sireax/core/internal/proto/webhooks"
-	"github.com/sireax/core/internal/uuid"
+	"github.com/sireax/core/common/proto/clientproto"
+	"github.com/sireax/core/common/proto/webhooks"
+	"github.com/sireax/core/common/uuid"
 	"io"
 	"sync"
 	"time"

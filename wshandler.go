@@ -290,16 +290,23 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 		for {
 
+			var counterMu sync.Mutex
+
+			counterMu.Lock()
 			if counter >= 10 {
+				counterMu.Unlock()
 				continue
 			}
+			counterMu.Unlock()
 
 			_, data, err := conn.ReadMessage()
 			if err != nil {
 				return
 			}
 
+			counterMu.Lock()
 			counter++
+			counterMu.Unlock()
 
 			client.Handle(data)
 
