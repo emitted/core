@@ -3,11 +3,9 @@ package core
 import (
 	"context"
 	"github.com/sireax/core/common/proto/clientproto"
-	"log"
 	"sync"
 )
 
-// Hub struct contains all data and structs of clients,channels etc.
 type Hub struct {
 	node *Node
 
@@ -16,7 +14,6 @@ type Hub struct {
 	conns map[string]*Client
 }
 
-// NewHub is a constructor method for the Hub struct
 func NewHub(n *Node) *Hub {
 	return &Hub{
 		node: n,
@@ -26,9 +23,9 @@ func NewHub(n *Node) *Hub {
 
 func (h *Hub) AddApp(app *App) {
 	h.mu.RLock()
-	_, ok := h.apps[app.Secret]
+	_, ok := h.apps[app.ID]
 	if !ok {
-		h.apps[app.Secret] = app
+		h.apps[app.ID] = app
 	}
 	h.mu.RUnlock()
 }
@@ -44,18 +41,14 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 		return
 	}
 
-	data, err := pub.Marshal()
-	if err != nil {
-		log.Fatal(err)
-		//	todo
-	}
+	data, _ := pub.Marshal()
 
 	push := &clientproto.Event{
 		Type: clientproto.EventType_PUBLICATION,
 		Data: data,
 	}
 
-	payload, err := push.Marshal()
+	payload, _ := push.Marshal()
 
 	for _, client := range h.apps[appKey].Channels[channelName].Clients {
 		client.messageWriter.enqueue(payload)
@@ -100,8 +93,6 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 		client.messageWriter.enqueue(payload)
 	}
 
-	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting join", map[string]interface{}{"app": appKey, "channel": join.Channel}))
-
 	app.Stats.Join++
 	//	todo
 
@@ -111,7 +102,9 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	h.mu.Lock()
 	app, ok := h.apps[appKey]
+	h.mu.Unlock()
 	if !ok {
 		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting leave", map[string]interface{}{"error": "app is not found"}))
 		return

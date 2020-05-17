@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/FZambia/eagle"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sireax/core/common/database"
 	"github.com/sireax/core/common/proto/clientproto"
 	"github.com/sireax/core/common/proto/nodeproto"
 	"github.com/sireax/core/common/uuid"
@@ -19,12 +18,14 @@ type Node struct {
 	uid       string
 	startedAt int64
 
-	broker  *Broker
-	hub     *Hub
-	webhook *webhookManager
-	config  Config
+	hub *Hub
 
-	nodes *nodeRegistry
+	mongo   *Mongo
+	broker  *Broker
+	webhook *webhookManager
+
+	config Config
+	nodes  *nodeRegistry
 
 	shutdown   bool
 	shutdownCh chan struct{}
@@ -53,8 +54,7 @@ func (n *Node) NotifyShutdown() chan struct{} {
 	return n.shutdownCh
 }
 
-// NewNode ...
-func NewNode(c Config, brokerConfig *BrokerConfig, kafkaConfig KafkaConfig) *Node {
+func NewNode(c Config, brokerConfig *BrokerConfig, mongoConfig MongoConfig, kafkaConfig KafkaConfig) *Node {
 	uid := uuid.Must(uuid.NewV4()).String()
 
 	subLocks := make(map[int]*sync.Mutex, numSubLocks)
@@ -86,9 +86,12 @@ func NewNode(c Config, brokerConfig *BrokerConfig, kafkaConfig KafkaConfig) *Nod
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	n.broker = broker
 
 	n.hub = NewHub(n)
+
+	n.mongo = NewMongo(n, mongoConfig)
 
 	n.webhook = NewWebhookManager(n, kafkaConfig)
 
@@ -107,7 +110,7 @@ func (n *Node) Run() error {
 		return err
 	}
 
-	err = database.SetupSession()
+	err = n.mongo.Run()
 	if err != nil {
 		return err
 	}
@@ -175,6 +178,34 @@ func (n *Node) initMetrics() error {
 	return nil
 }
 
+func (n *Node) getApp(secret string) (*App, error) {
+
+	app, err := n.mongo.GetAppBySecret(secret)
+	if err != nil {
+		return nil, err
+	}
+
+	okApp, ok := n.hub.apps[app.ID]
+	if !ok {
+
+		app.node = n
+		app.Clients = make(map[string]*Client)
+		app.Channels = make(map[string]*Channel)
+
+		app.Stats = AppStats{
+			Connections: 0,
+			Messages:    0,
+		}
+		n.hub.AddApp(app)
+
+		go app.run()
+
+		return app, nil
+	}
+
+	return okApp, nil
+}
+
 func (n *Node) Publish(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.PublishRequest) error {
 	return n.broker.Publish(chId, clientInfo, r)
 }
@@ -199,12 +230,12 @@ func (n *Node) UpdateAppStats(app string, stats *AppStats) error {
 	return n.broker.UpdateStats(app, stats)
 }
 
-func (n *Node) AppStats(secret string) (map[string]string, error) {
-	return n.broker.AppStats(secret)
+func (n *Node) AppStats(app string) (map[string]string, error) {
+	return n.broker.AppStats(app)
 }
 
-func (n *Node) Channels(appSec string) ([]string, error) {
-	return n.broker.Channels(appSec)
+func (n *Node) Channels(app string) ([]string, error) {
+	return n.broker.Channels(app)
 }
 
 func (n *Node) pubNode() error {

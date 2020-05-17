@@ -9,14 +9,14 @@ import (
 func parseChId(id string) (string, string) {
 
 	arr := strings.Split(id, ":")
-	appSecret := arr[0]
+	app := arr[0]
 	channelName := arr[1]
 
-	return appSecret, channelName
+	return app, channelName
 }
 
-func makeChId(appKey string, chName string) string {
-	return appKey + ":" + chName
+func makeChId(app string, chName string) string {
+	return app + ":" + chName
 }
 
 func ChannelID(key string) string {
@@ -33,9 +33,9 @@ func ChannelID(key string) string {
 func getChannelType(ch string) string {
 
 	switch true {
-	case strings.HasPrefix(ch, "private"):
+	case strings.HasPrefix(ch, "private-"):
 		return "private"
-	case strings.HasPrefix(ch, "presence"):
+	case strings.HasPrefix(ch, "presence-"):
 		return "presence"
 	default:
 		return "public"

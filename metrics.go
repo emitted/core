@@ -24,14 +24,17 @@ var (
 		Namespace: metricsNamespace,
 		Name:      "num_channels",
 	})
+
+	commandsDurationHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "commands_duration_seconds",
+			Buckets: []float64{1, 2, 5, 10, 20, 60},
+		},
+		[]string{"command_type"},
+	)
 )
 
 var (
-	messagesReceivedCountPublication prometheus.Counter
-	messagesReceivedCountJoin        prometheus.Counter
-	messagesReceivedCountLeave       prometheus.Counter
-	messagesReceivedCountControl     prometheus.Counter
-
 	messagesSentCountPublication prometheus.Counter
 	messagesSentCountJoin        prometheus.Counter
 	messagesSentCountLeave       prometheus.Counter
@@ -44,10 +47,7 @@ func init() {
 	prometheus.MustRegister(numClientsGauge)
 	prometheus.MustRegister(numChannelsGauge)
 
-	messagesReceivedCountPublication = messagesReceivedCount.WithLabelValues("publication")
-	messagesReceivedCountJoin = messagesReceivedCount.WithLabelValues("join")
-	messagesReceivedCountLeave = messagesReceivedCount.WithLabelValues("leave")
-	messagesReceivedCountControl = messagesReceivedCount.WithLabelValues("control")
+	prometheus.MustRegister(commandsDurationHistogram)
 
 	messagesSentCountPublication = messagesSentCount.WithLabelValues("publication")
 	messagesSentCountJoin = messagesReceivedCount.WithLabelValues("join")

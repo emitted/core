@@ -7,24 +7,23 @@ import (
 	"strings"
 )
 
-func generateSignature(key, uid, channel string) string {
+func generateSignature(appId, uid, channel string) string {
 
 	signArray := []string{uid, channel}
 	sign := strings.Join(signArray, ":")
 
-	h := hmac.New(sha256.New, []byte(key))
+	h := hmac.New(sha256.New, []byte(appId))
 	h.Write([]byte(sign))
 
-	//return base64.StdEncoding.EncodeToString(h.Sum(nil))
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func generatePresenceSignature(key, uid, channel, id string, data []byte) string {
+func generatePresenceSignature(appId, uid, channel, id string, data []byte) string {
 
 	signArray := []string{uid, channel, id, string(data)}
 	sign := strings.Join(signArray, ":")
 
-	h := hmac.New(sha256.New, []byte(key))
+	h := hmac.New(sha256.New, []byte(appId))
 	h.Write([]byte(sign))
 
 	return hex.EncodeToString(h.Sum(nil))

@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"github.com/sireax/core/common/database"
 	"sync"
 	"time"
 )
@@ -15,27 +14,43 @@ type AppStats struct {
 	Leave       int
 }
 
+type AppWebhook struct {
+	Url string `bson:"url"`
+
+	Channel     bool `bson:"channel"`
+	Presence    bool `bson:"presence"`
+	Publication bool `bson:"publication"`
+}
+
+type AppOptions struct {
+	ClientPublications bool         `bson:"client_publications"`
+	JoinLeave          bool         `bson:"join_leave"`
+	Webhooks           []AppWebhook `bson:"webhooks"`
+}
+
+type AppCredentials struct {
+	Secret string `bson:"secret"`
+	Key    string `bson:"key"`
+}
+
 type App struct {
-	ID     string
-	Key    string
-	Secret string
+	mu sync.Mutex
 
-	MaxConnections int
-	MaxMessages    int
+	ID             string           `bson:"_id"`
+	Credentials    []AppCredentials `bson:"credentials"`
+	MaxConnections int              `bson:"max_connections"`
+	MaxMessages    int              `bson:"max_messages"`
 
-	Due time.Time
+	Due time.Time `bson:"due"`
 
 	node *Node
 
-	mu sync.Mutex
-
 	Clients  map[string]*Client
 	Channels map[string]*Channel
-	Options  database.Options
+
+	Options AppOptions `bson:"options"`
 
 	Stats AppStats
-
-	DueTime *time.Time
 
 	shutdown bool
 }
@@ -46,16 +61,6 @@ func (app *App) CanHaveNewConns() bool {
 	}
 
 	return false
-}
-
-func (app *App) Destroy() {
-	app.mu.Lock()
-	if app.shutdown {
-		app.mu.Unlock()
-		return
-	}
-	app.shutdown = true
-
 }
 
 func (app *App) Shutdown() {
@@ -74,64 +79,20 @@ func (app *App) Shutdown() {
 	}
 
 	for name, channel := range channels {
-		chId := makeChId(app.Secret, name)
+		chId := makeChId(app.ID, name)
 		err := app.node.broker.Unsubscribe(chId)
 		if err != nil {
-			//	todo
+			app.node.logger.log(NewLogEntry(LogLevelError, "error unsubscribing channel on app shutdown", map[string]interface{}{"app": app.ID, "error": err.Error()}))
 		}
 
 		for _, client := range channel.Clients {
-			client.Close(DisconnectSubscriptionEnded)
+			err := client.Close(DisconnectSubscriptionEnded)
+			if err != nil {
+				app.node.logger.log(NewLogEntry(LogLevelError, "error closing client on app shutdown", map[string]interface{}{"uid": client.uid, "error": err.Error()}))
+			}
 		}
 	}
 
-}
-
-func GetApp(n *Node, secret string) (*App, error) {
-	app, ok := n.hub.apps[secret]
-	if !ok {
-		dbApp := database.GetAppBySecret(secret)
-		err := dbApp.Validate()
-		if err != nil {
-			return nil, err
-		}
-
-		app = NewApp(n, dbApp)
-		n.hub.AddApp(app)
-	}
-
-	return app, nil
-}
-
-func NewApp(n *Node, dbApp database.App) *App {
-
-	app := &App{
-		ID:     dbApp.Id,
-		Secret: dbApp.Secret,
-		Key:    dbApp.Key,
-
-		Clients:  make(map[string]*Client),
-		Channels: make(map[string]*Channel),
-
-		MaxConnections: dbApp.MaxConnections,
-		MaxMessages:    dbApp.MaxMessages,
-
-		Due: dbApp.Due,
-
-		Options: dbApp.Options,
-		Stats: AppStats{
-			Connections: 0,
-			Messages:    0,
-		},
-	}
-
-	app.node = n
-
-	n.logger.log(NewLogEntry(LogLevelDebug, "shutdown due", map[string]interface{}{"due": app.Due.String()}))
-
-	go app.run()
-
-	return app
 }
 
 func (app *App) run() {
@@ -152,8 +113,9 @@ func (app *App) run() {
 				return
 			}
 
-			err := app.node.UpdateAppStats(app.Secret, snapshot)
+			err := app.node.UpdateAppStats(app.ID, snapshot)
 			if err != nil {
+				ticker.Stop()
 				app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"error": err.Error()}))
 			}
 		}

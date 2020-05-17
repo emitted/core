@@ -186,24 +186,24 @@ func (b *Broker) GetPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return b.getShard(ch).getPresence(ch, uid)
 }
 
-func (b *Broker) UpdateStats(appSec string, stats *AppStats) error {
-	return b.getShard(appSec).updateStats(appSec, stats)
+func (b *Broker) UpdateStats(app string, stats *AppStats) error {
+	return b.getShard(app).updateStats(app, stats)
 }
 
-func (b *Broker) Channels(appSec string) ([]string, error) {
-	return b.getShard(appSec).Channels(appSec)
+func (b *Broker) Channels(app string) ([]string, error) {
+	return b.getShard(app).Channels(app)
 }
 
-func (b *Broker) AddChannel(secret, channel string) error {
-	return b.getShard(secret).addChannel(secret, channel)
+func (b *Broker) AddChannel(app, channel string) error {
+	return b.getShard(app).addChannel(app, channel)
 }
 
-func (b *Broker) RemChannel(secret, channel string) error {
-	return b.getShard(secret).remChannel(secret, channel)
+func (b *Broker) RemChannel(app, channel string) error {
+	return b.getShard(app).remChannel(app, channel)
 }
 
-func (b *Broker) AppStats(secret string) (map[string]string, error) {
-	return b.getShard(secret).appStats(secret)
+func (b *Broker) AppStats(app string) (map[string]string, error) {
+	return b.getShard(app).appStats(app)
 }
 
 func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
@@ -272,16 +272,16 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 	}
 }
 
-func (s *shard) presenceHashKey(ch string) string {
-	return "client.presence.data." + ch
+func (s *shard) presenceHashKey(chID string) string {
+	return "client.presence.data." + chID
 }
 
-func (s *shard) statsHashKey(secret string) string {
-	return "app.stats." + secret
+func (s *shard) statsHashKey(app string) string {
+	return "app.stats." + app
 }
 
-func (s *shard) channelsHashKey(secret string) string {
-	return "app.channels." + secret
+func (s *shard) channelsHashKey(app string) string {
+	return "app.channels." + app
 }
 
 func (s *shard) addPresence(ch, uid string, clientInfo *clientproto.ClientInfo) error {
@@ -322,8 +322,6 @@ func (s *shard) getPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	dr := newDataRequest(dataOpGetPresence, []interface{}{hashKey, uid})
 	resp := s.getDataResponse(dr)
 
-	s.node.logger.log(NewLogEntry(LogLevelDebug, "received presence data", map[string]interface{}{"response": resp.reply}))
-
 	var clientInfo clientproto.ClientInfo
 	err := clientInfo.Unmarshal(resp.reply.([]byte))
 	if err != nil {
@@ -345,8 +343,8 @@ func (s *shard) updateStats(app string, stats *AppStats) error {
 	return resp.err
 }
 
-func (s *shard) addChannel(secret, channel string) error {
-	hashKey := s.channelsHashKey(secret)
+func (s *shard) addChannel(app, channel string) error {
+	hashKey := s.channelsHashKey(app)
 
 	dr := newDataRequest(dataOpAddChannel, []interface{}{hashKey, channel})
 	resp := s.getDataResponse(dr)
@@ -354,8 +352,8 @@ func (s *shard) addChannel(secret, channel string) error {
 	return resp.err
 }
 
-func (s *shard) remChannel(secret, channel string) error {
-	hashKey := s.channelsHashKey(secret)
+func (s *shard) remChannel(app, channel string) error {
+	hashKey := s.channelsHashKey(app)
 
 	dr := newDataRequest(dataOpRemChannel, []interface{}{hashKey, channel})
 	resp := s.getDataResponse(dr)
@@ -363,8 +361,8 @@ func (s *shard) remChannel(secret, channel string) error {
 	return resp.err
 }
 
-func (s *shard) appStats(secret string) (map[string]string, error) {
-	hashKey := s.statsHashKey(secret)
+func (s *shard) appStats(app string) (map[string]string, error) {
+	hashKey := s.statsHashKey(app)
 
 	dr := newDataRequest(dataOpStats, []interface{}{hashKey})
 	resp := s.getDataResponse(dr)
@@ -589,9 +587,9 @@ func (s *shard) runPublishPipeline() {
 	}
 }
 
-func (s *shard) Channels(secret string) ([]string, error) {
+func (s *shard) Channels(app string) ([]string, error) {
 
-	channelsHashKey := s.channelsHashKey(secret)
+	channelsHashKey := s.channelsHashKey(app)
 
 	dr := newDataRequest(dataOpChannels, []interface{}{channelsHashKey})
 	resp := s.getDataResponse(dr)
@@ -960,7 +958,6 @@ func (s *shard) RunDataPipeline() {
 		for i := range drs {
 			switch drs[i].op {
 			case dataOpAddPresence:
-				s.node.logger.log(NewLogEntry(LogLevelDebug, "sending add presence", map[string]interface{}{"args": drs[i].args}))
 				err := s.addPresenceScript.SendHash(conn, drs[i].args...)
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "add presence", "error": err.Error()}))
@@ -996,7 +993,6 @@ func (s *shard) RunDataPipeline() {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
 				}
 			case dataOpAddChannel:
-				s.node.logger.log(NewLogEntry(LogLevelError, "received args", map[string]interface{}{"r": drs[i].args}))
 				err := s.addChannelScript.SendHash(conn, drs[i].args...)
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))

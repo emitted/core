@@ -45,7 +45,10 @@ func (t *websocketTransport) ping() {
 		deadline := time.Now().Add(t.options.pingInterval / 2)
 		err := t.conn.WriteControl(websocket.PingMessage, []byte("ping"), deadline)
 		if err != nil {
-			t.Close(DisconnectServerError)
+			err := t.Close(DisconnectServerError)
+			if err != nil {
+
+			}
 			return
 		}
 		t.addPing()
@@ -106,9 +109,15 @@ func (t *websocketTransport) Close(disconnect *Disconnect) error {
 		}
 
 		// Wait for closing handshake completion.
-		t.conn.Close()
+		err = t.conn.Close()
+		if err != nil {
+
+		}
 	}
-	t.conn.Close()
+	err := t.conn.Close()
+	if err != nil {
+
+	}
 
 	return nil
 }
@@ -183,8 +192,10 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := GetApp(s.node, secret)
+	app, err := s.node.getApp(secret)
 	if err != nil {
+		rw.WriteHeader(http.StatusForbidden)
+		s.node.logger.log(NewLogEntry(LogLevelError, "client error connecting to app", map[string]interface{}{"error": err.Error()}))
 		return
 	}
 
@@ -251,7 +262,10 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 		select {
 		case <-s.node.NotifyShutdown():
-			transport.Close(DisconnectShutdown)
+			err := transport.Close(DisconnectShutdown)
+			if err != nil {
+				s.node.logger.log(NewLogEntry(LogLevelError, "error closing transport"))
+			}
 			return
 		default:
 		}
@@ -266,20 +280,6 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 		client.Connect(app)
 
-		counter := 0
-
-		go func() {
-			resetter := time.NewTicker(time.Second)
-			for {
-				select {
-				case <-closeCh:
-					resetter.Stop()
-				case <-resetter.C:
-					counter = 0
-				}
-			}
-		}()
-
 		defer func() {
 			close(closeCh)
 			err := client.Close(nil)
@@ -290,23 +290,10 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 		for {
 
-			var counterMu sync.Mutex
-
-			counterMu.Lock()
-			if counter >= 10 {
-				counterMu.Unlock()
-				continue
-			}
-			counterMu.Unlock()
-
 			_, data, err := conn.ReadMessage()
 			if err != nil {
 				return
 			}
-
-			counterMu.Lock()
-			counter++
-			counterMu.Unlock()
 
 			client.Handle(data)
 
