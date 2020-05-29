@@ -52,9 +52,11 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 
 	for _, client := range h.apps[appKey].Channels[channelName].Clients {
 		client.messageWriter.enqueue(payload)
-	}
 
-	app.Stats.Messages++
+		app.Stats.mu.RLock()
+		app.Stats.Messages++
+		app.Stats.mu.RUnlock()
+	}
 
 }
 
@@ -91,10 +93,11 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 
 	for _, client := range h.apps[appKey].Channels[join.Channel].Clients {
 		client.messageWriter.enqueue(payload)
-	}
 
-	app.Stats.Join++
-	//	todo
+		app.Stats.mu.RLock()
+		app.Stats.Messages++
+		app.Stats.mu.RUnlock()
+	}
 
 }
 

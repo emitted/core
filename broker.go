@@ -461,6 +461,36 @@ func (s *shard) mapStringStats(reply interface{}, err error) (map[string]string,
 	return stats, nil
 }
 
+func (s *shard) Channels(app string) ([]string, error) {
+
+	channelsHashKey := s.channelsHashKey(app)
+
+	dr := newDataRequest(dataOpChannels, []interface{}{channelsHashKey})
+	resp := s.getDataResponse(dr)
+
+	if resp.err != nil {
+		return nil, resp.err
+	}
+
+	values, err := redis.Values(resp.reply, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	s.node.logger.log(NewLogEntry(LogLevelDebug, "got values", map[string]interface{}{"values": values}))
+	channels := make([]string, 0, len(values))
+	for i := 0; i < len(values); i++ {
+		value, okValue := values[i].([]byte)
+		if !okValue {
+			return nil, errors.New("error getting ChannelID value")
+		}
+
+		channels = append(channels, string(value))
+	}
+
+	return channels, nil
+}
+
 func (s *shard) getDataResponse(r dataRequest) *dataResponse {
 	select {
 	case s.dataMessages <- r:
@@ -585,36 +615,6 @@ func (s *shard) runPublishPipeline() {
 			prs = nil
 		}
 	}
-}
-
-func (s *shard) Channels(app string) ([]string, error) {
-
-	channelsHashKey := s.channelsHashKey(app)
-
-	dr := newDataRequest(dataOpChannels, []interface{}{channelsHashKey})
-	resp := s.getDataResponse(dr)
-
-	if resp.err != nil {
-		return nil, resp.err
-	}
-
-	values, err := redis.Values(resp.reply, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	s.node.logger.log(NewLogEntry(LogLevelDebug, "got values", map[string]interface{}{"values": values}))
-	channels := make([]string, 0, len(values))
-	for i := 0; i < len(values); i++ {
-		value, okValue := values[i].([]byte)
-		if !okValue {
-			return nil, errors.New("error getting ChannelID value")
-		}
-
-		channels = append(channels, string(value))
-	}
-
-	return channels, nil
 }
 
 func (s *shard) runPubSub() {

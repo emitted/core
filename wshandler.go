@@ -288,6 +288,21 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			}
 		}()
 
+		var handleMu sync.RWMutex
+		var msgCount int
+
+		ticker := time.NewTicker(time.Second)
+		go func() {
+			for {
+				select {
+				case <-ticker.C:
+					msgCount = 0
+				case <-s.node.NotifyShutdown():
+					ticker.Stop()
+				}
+			}
+		}()
+
 		for {
 
 			_, data, err := conn.ReadMessage()
@@ -295,8 +310,17 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			client.Handle(data)
+			go func() {
+				handleMu.RLock()
+				defer handleMu.RUnlock()
 
+				if msgCount >= 10 {
+					s.node.logger.log(NewLogEntry(LogLevelDebug, "client sent more than 10 messages in one second", map[string]interface{}{"client": client.uid}))
+					return
+				}
+				client.Handle(data)
+				msgCount++
+			}()
 		}
 	}()
 

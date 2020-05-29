@@ -32,7 +32,7 @@ func NewMongo(n *Node, config MongoConfig) *Mongo {
 }
 
 func (m *Mongo) executeQuery(s func(*mgo.Collection) error) error {
-	c := m.session.DB(m.dbName).C(m.collectionName)
+	c := m.session.Copy().DB(m.dbName).C(m.collectionName)
 	return s(c)
 }
 
@@ -40,6 +40,17 @@ func (m *Mongo) Run() error {
 	address := m.config.Address
 
 	session, err := mgo.Dial(address)
+	if err != nil {
+		return err
+	}
+
+	session.SetMode(mgo.Monotonic, true)
+
+	index := mgo.Index{
+		Key: []string{"credentials.secret", "credentials.key"},
+	}
+	c := session.DB(m.dbName).C(m.collectionName)
+	err = c.EnsureIndex(index)
 	if err != nil {
 		return err
 	}

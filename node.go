@@ -115,6 +115,13 @@ func (n *Node) Run() error {
 		return err
 	}
 
+	err = n.initMetrics()
+	if err != nil {
+		return err
+	}
+
+	go n.sendNodePing()
+	go n.cleanNodeInfo()
 	go n.updateMetrics()
 
 	return nil
@@ -176,6 +183,34 @@ func (n *Node) initMetrics() error {
 	}()
 
 	return nil
+}
+
+func (n *Node) sendNodePing() {
+	for {
+		select {
+		case <-n.shutdownCh:
+			return
+		case <-time.After(time.Minute * 30):
+			err := n.pubNode()
+			if err != nil {
+				n.logger.log(newLogEntry(LogLevelError, "error publishing node control command", map[string]interface{}{"error": err.Error()}))
+			}
+		}
+	}
+}
+
+func (n *Node) cleanNodeInfo() {
+	for {
+		select {
+		case <-n.shutdownCh:
+			return
+		case <-time.After(time.Minute * 30):
+			n.mu.RLock()
+			delay := time.Duration(5)
+			n.mu.RUnlock()
+			n.nodes.clean(delay)
+		}
+	}
 }
 
 func (n *Node) getApp(secret string) (*App, error) {
@@ -355,7 +390,7 @@ func (r *nodeRegistry) clean(delay time.Duration) {
 	r.mu.Lock()
 	for uid := range r.nodes {
 		if uid == r.currentUID {
-			// No need to clean info for current nodeproto.
+			// No need to clean info for current node.
 			continue
 		}
 		updated, ok := r.updates[uid]
@@ -365,7 +400,7 @@ func (r *nodeRegistry) clean(delay time.Duration) {
 			continue
 		}
 		if time.Now().Unix()-updated > int64(delay.Seconds()) {
-			// Too many seconds since this nodeproto have been last seen - remove it from map.
+			// Too many seconds since this node have been last seen - remove it from map.
 			delete(r.nodes, uid)
 			delete(r.updates, uid)
 		}

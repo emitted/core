@@ -10,14 +10,6 @@ type (
 	Webhook = webhooks.Webhook
 )
 
-const (
-	WebhookEventChannelOccupied = webhooks.Event_CHANNEL_OCCUPIED
-	WebhookEventChannelVacated  = webhooks.Event_CHANNEL_VACATED
-	WebhookEventJoin            = webhooks.Event_PRESENCE_ADDED
-	WebhookEventLeave           = webhooks.Event_PRESENCE_REMOVED
-	WebhookEventPublication     = webhooks.Event_PUBLICATION
-)
-
 type KafkaConfig struct {
 	Protocol, Address, Topic string
 	Partition                int
@@ -26,11 +18,10 @@ type KafkaConfig struct {
 }
 
 var DefaultKafkaConfig = KafkaConfig{
-	Protocol:  "tcp",
-	Address:   "localhost:9092",
-	Topic:     "emitted-server-webhooks",
-	Partition: 0,
-
+	Protocol:     "tcp",
+	Address:      "localhost:9092",
+	Topic:        "emitted-server-webhooks",
+	Partition:    0,
 	WriteTimeout: 1,
 }
 
@@ -75,15 +66,12 @@ func (w *webhookManager) Run() error {
 
 func (w *webhookManager) runProducePipeline() {
 
-	select {
-	case <-w.node.NotifyShutdown():
-		return
-	default:
-	}
-
 	go func() {
 		for {
 			select {
+
+			case <-w.node.NotifyShutdown():
+				return
 
 			case r := <-w.pubCh:
 
@@ -95,7 +83,7 @@ func (w *webhookManager) runProducePipeline() {
 
 				select {
 				case w.producer.Input() <- msg:
-					w.node.logger.log(NewLogEntry(LogLevelInfo, "producing webhook"))
+					w.node.logger.log(NewLogEntry(LogLevelDebug, "producing webhook", map[string]interface{}{"msg": msg}))
 				}
 
 			}
