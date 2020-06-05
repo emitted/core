@@ -7,7 +7,6 @@ import (
 )
 
 type AppStats struct {
-	mu          sync.RWMutex
 	Connections int
 	Messages    int
 	Join        int
@@ -34,7 +33,7 @@ type AppCredentials struct {
 }
 
 type App struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 
 	ID             string           `bson:"_id"`
 	Credentials    []AppCredentials `bson:"credentials"`
@@ -103,7 +102,7 @@ func (app *App) run() {
 		case <-ticker.C:
 
 			app.mu.Lock()
-			snapshot := &app.Stats
+			snapshot := app.Stats
 			app.mu.Unlock()
 
 			if !app.checkDue() {

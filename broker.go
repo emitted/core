@@ -186,7 +186,7 @@ func (b *Broker) GetPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return b.getShard(ch).getPresence(ch, uid)
 }
 
-func (b *Broker) UpdateStats(app string, stats *AppStats) error {
+func (b *Broker) UpdateStats(app string, stats AppStats) error {
 	return b.getShard(app).updateStats(app, stats)
 }
 
@@ -331,12 +331,10 @@ func (s *shard) getPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return &clientInfo, resp.err
 }
 
-func (s *shard) updateStats(app string, stats *AppStats) error {
+func (s *shard) updateStats(app string, stats AppStats) error {
 	hashKey := s.statsHashKey(app)
 
-	stats.mu.Lock()
 	dr := newDataRequest(dataOpUpdateStats, []interface{}{hashKey, "clients", stats.Connections, "messages", stats.Messages, "joins", stats.Join, "leaves", stats.Leave})
-	stats.mu.Unlock()
 
 	resp := s.getDataResponse(dr)
 
@@ -747,6 +745,10 @@ func (s *shard) runPubSub() {
 
 					switch ChannelID(message.Channel) {
 					case "ping":
+					case "node-info":
+
+						s.node.handleNodeInfo(message.Data)
+
 					default:
 
 						var push clientproto.Event
@@ -797,7 +799,7 @@ func (s *shard) runPubSub() {
 	go func() {
 		chIDs := make([]string, 2)
 		chIDs[0] = "pingchannel"
-		chIDs[1] = "sysnodeinfo"
+		chIDs[1] = "--emitted-node-info"
 
 		for _, ch := range s.node.hub.Channels() {
 			if s.broker.getShard(ch) == s {
@@ -1209,7 +1211,7 @@ func (s *shard) PublishNode(data []byte) error {
 	eChan := make(chan error, 1)
 
 	pr := pubRequest{
-		chId: "sysnodeinfo",
+		chId: "--emitted-node-info",
 		data: data,
 		err:  eChan,
 	}

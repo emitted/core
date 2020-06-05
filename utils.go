@@ -23,8 +23,8 @@ func ChannelID(key string) string {
 	switch key {
 	case "pingchannel":
 		return "ping"
-	case "nodesysinfo":
-		return "nodeproto"
+	case "--emitted-node-info":
+		return "node-info"
 	default:
 		return key
 	}

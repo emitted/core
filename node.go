@@ -186,11 +186,12 @@ func (n *Node) initMetrics() error {
 }
 
 func (n *Node) sendNodePing() {
+	ticker := time.NewTicker(time.Second * 3)
 	for {
 		select {
 		case <-n.shutdownCh:
 			return
-		case <-time.After(time.Minute * 30):
+		case <-ticker.C:
 			err := n.pubNode()
 			if err != nil {
 				n.logger.log(newLogEntry(LogLevelError, "error publishing node control command", map[string]interface{}{"error": err.Error()}))
@@ -204,7 +205,7 @@ func (n *Node) cleanNodeInfo() {
 		select {
 		case <-n.shutdownCh:
 			return
-		case <-time.After(time.Minute * 30):
+		case <-time.After(time.Second * 9):
 			n.mu.RLock()
 			delay := time.Duration(5)
 			n.mu.RUnlock()
@@ -261,7 +262,7 @@ func (n *Node) GetPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return n.broker.GetPresence(ch, uid)
 }
 
-func (n *Node) UpdateAppStats(app string, stats *AppStats) error {
+func (n *Node) UpdateAppStats(app string, stats AppStats) error {
 	return n.broker.UpdateStats(app, stats)
 }
 
@@ -384,6 +385,32 @@ func (r *nodeRegistry) add(info *nodeproto.Node) {
 	}
 	r.updates[info.UID] = time.Now().Unix()
 	r.mu.Unlock()
+}
+
+func (n *Node) handleNodeInfo(data []byte) {
+	cmd, err := n.protoDecoder.DecodeCommand(data)
+	if err != nil {
+		return
+	}
+
+	if cmd.UID == n.uid {
+		return
+	}
+
+	method := cmd.Method
+	params := cmd.Params
+
+	switch method {
+	case nodeproto.MethodTypeNode:
+		info, err := n.protoDecoder.DecodeNode(params)
+		if err != nil {
+
+		}
+
+		n.nodes.add(info)
+	default:
+		n.logger.log(NewLogEntry(LogLevelError, "invalid node method"))
+	}
 }
 
 func (r *nodeRegistry) clean(delay time.Duration) {

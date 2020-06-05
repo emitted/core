@@ -16,8 +16,9 @@ type Hub struct {
 
 func NewHub(n *Node) *Hub {
 	return &Hub{
-		node: n,
-		apps: make(map[string]*App),
+		node:  n,
+		apps:  make(map[string]*App),
+		conns: make(map[string]*Client),
 	}
 }
 
@@ -53,11 +54,31 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 	for _, client := range h.apps[appKey].Channels[channelName].Clients {
 		client.messageWriter.enqueue(payload)
 
-		app.Stats.mu.RLock()
+		app.mu.RLock()
 		app.Stats.Messages++
-		app.Stats.mu.RUnlock()
+		app.mu.RUnlock()
 	}
 
+}
+
+func (h *Hub) addSub(c *Client) {
+	h.mu.RLock()
+	if _, ok := h.conns[c.uid]; ok {
+		h.mu.RUnlock()
+		return
+	}
+	h.conns[c.uid] = c
+	h.mu.RUnlock()
+}
+
+func (h *Hub) remSub(c *Client) {
+	h.mu.RLock()
+	if _, ok := h.conns[c.uid]; !ok {
+		h.mu.RUnlock()
+		return
+	}
+	delete(h.conns, c.uid)
+	h.mu.RUnlock()
 }
 
 func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
@@ -94,9 +115,9 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 	for _, client := range h.apps[appKey].Channels[join.Channel].Clients {
 		client.messageWriter.enqueue(payload)
 
-		app.Stats.mu.RLock()
+		app.mu.RLock()
 		app.Stats.Messages++
-		app.Stats.mu.RUnlock()
+		app.mu.RUnlock()
 	}
 
 }

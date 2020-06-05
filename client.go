@@ -118,8 +118,12 @@ func (c *Client) Connect(app *App) {
 	c.app = app
 	c.mu.Unlock()
 
+	app.mu.Lock()
 	app.Clients[c.uid] = c
 	app.Stats.Connections++
+	app.mu.Unlock()
+
+	c.node.hub.addSub(c)
 
 	numClientsGauge.Inc()
 }
@@ -130,6 +134,8 @@ func (c *Client) Disconnect() {
 	delete(c.app.Clients, c.uid)
 	c.app.Stats.Connections--
 	c.app.mu.Unlock()
+
+	c.node.hub.remSub(c)
 
 	numClientsGauge.Dec()
 
@@ -413,12 +419,12 @@ func (c *Client) canPublish() bool {
 	c.mu.RUnlock()
 
 	if can {
-		c.app.Stats.mu.Lock()
+		c.app.mu.RLock()
 		if c.app.Stats.Messages < c.app.MaxMessages {
-			c.app.Stats.mu.Unlock()
+			c.app.mu.RUnlock()
 			return true
 		}
-		c.app.Stats.mu.Unlock()
+		c.app.mu.RUnlock()
 		return false
 	}
 
@@ -648,7 +654,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	case "presence":
 
-		signature := generatePresenceSignature(app, uid, p.Channel, p.Data.Id, p.Data.Data)
+		signature := generatePresenceSignature(app, uid, channel, p.Data.Id, p.Data.Data)
 
 		ok := verifySignature(signature, p.Signature)
 		if !ok {
