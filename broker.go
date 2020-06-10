@@ -475,7 +475,6 @@ func (s *shard) Channels(app string) ([]string, error) {
 		return nil, err
 	}
 
-	s.node.logger.log(NewLogEntry(LogLevelDebug, "got values", map[string]interface{}{"values": values}))
 	channels := make([]string, 0, len(values))
 	for i := 0; i < len(values); i++ {
 		value, okValue := values[i].([]byte)

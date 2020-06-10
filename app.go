@@ -106,7 +106,6 @@ func (app *App) run() {
 			app.mu.Unlock()
 
 			if !app.checkDue() {
-
 				ticker.Stop()
 				app.Shutdown()
 				return
@@ -130,8 +129,8 @@ func (app *App) addSub(ch string, c *Client) bool {
 
 	first := false
 
-	app.mu.Lock()
-	defer app.mu.Unlock()
+	//app.mu.Lock()
+	//defer app.mu.Unlock()
 
 	_, ok := app.Channels[ch]
 
@@ -152,8 +151,8 @@ func (app *App) addSub(ch string, c *Client) bool {
 
 func (app *App) removeSub(ch string, uid string) (bool, error) {
 
-	app.mu.Lock()
-	defer app.mu.Unlock()
+	//app.mu.Lock()
+	//defer app.mu.Unlock()
 
 	if _, ok := app.Channels[ch]; !ok {
 		return false, errors.New("channel does not exist")
@@ -177,7 +176,7 @@ func (app *App) makeChannel(name string) (*Channel, error) {
 	ch := &Channel{
 		Name:    name,
 		App:     app,
-		Clients: map[string]*Client{},
+		Clients: make(map[string]*Client),
 	}
 
 	return ch, nil

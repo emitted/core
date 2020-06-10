@@ -54,31 +54,30 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 	for _, client := range h.apps[appKey].Channels[channelName].Clients {
 		client.messageWriter.enqueue(payload)
 
-		app.mu.RLock()
 		app.Stats.Messages++
-		app.mu.RUnlock()
 	}
 
 }
 
-func (h *Hub) addSub(c *Client) {
-	h.mu.RLock()
-	if _, ok := h.conns[c.uid]; ok {
-		h.mu.RUnlock()
+func (h *Hub) addSub(uid string, c *Client) {
+	h.mu.Lock()
+	if _, ok := h.conns[uid]; ok {
+		h.mu.Unlock()
 		return
 	}
-	h.conns[c.uid] = c
-	h.mu.RUnlock()
+	h.conns[uid] = c
+	h.mu.Unlock()
 }
 
-func (h *Hub) remSub(c *Client) {
-	h.mu.RLock()
-	if _, ok := h.conns[c.uid]; !ok {
-		h.mu.RUnlock()
+func (h *Hub) remSub(uid string) {
+	h.mu.Lock()
+	_, ok := h.conns[uid]
+	if !ok {
+		h.mu.Unlock()
 		return
 	}
-	delete(h.conns, c.uid)
-	h.mu.RUnlock()
+	delete(h.conns, uid)
+	h.mu.Unlock()
 }
 
 func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
@@ -115,9 +114,7 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 	for _, client := range h.apps[appKey].Channels[join.Channel].Clients {
 		client.messageWriter.enqueue(payload)
 
-		app.mu.RLock()
 		app.Stats.Messages++
-		app.mu.RUnlock()
 	}
 
 }
@@ -126,9 +123,7 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	h.mu.Lock()
 	app, ok := h.apps[appKey]
-	h.mu.Unlock()
 	if !ok {
 		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting leave", map[string]interface{}{"error": "app is not found"}))
 		return
@@ -157,11 +152,11 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 
 	for _, client := range h.apps[appKey].Channels[leave.Channel].Clients {
 		client.messageWriter.enqueue(payload)
+
+		app.Stats.Leave++
 	}
 
 	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting leave", map[string]interface{}{"app": appKey, "channel": leave.Channel}))
-
-	app.Stats.Leave++
 
 }
 
@@ -212,13 +207,11 @@ func (h *Hub) shutdown(ctx context.Context) error {
 
 func (h *Hub) Channels() []string {
 	channels := make([]string, 0)
-	h.mu.Lock()
 	for _, app := range h.apps {
 		for ch := range app.Channels {
 			channels = append(channels, ch)
 		}
 	}
-	h.mu.Unlock()
 
 	return channels
 }

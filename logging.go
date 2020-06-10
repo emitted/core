@@ -4,43 +4,11 @@ package core
 type LogLevel int
 
 const (
-	// LogLevelNone means no logging.
 	LogLevelNone LogLevel = iota
-	// LogLevelDebug turns on debug logs - its generally too much for production in normal
-	// conditions but can help when developing and investigating problems in production.
 	LogLevelDebug
-	// LogLevelInfo is logs useful server information. This includes various information
-	// about problems with clientproto connections which is not Centrifugo errors but
-	// in most situations malformed clientproto behaviour.
 	LogLevelInfo
-	// LogLevelError level logs only server errors. This is logging that means non-working
-	// Centrifugo and maybe effort from developers/administrators to make things
-	// work again.
 	LogLevelError
 )
-
-var levelToString = map[LogLevel]string{
-	LogLevelDebug: "debug",
-	LogLevelInfo:  "info",
-	LogLevelError: "error",
-	LogLevelNone:  "none",
-}
-
-// LogStringToLevel matches level string to LogLevel.
-var LogStringToLevel = map[string]LogLevel{
-	"debug": LogLevelDebug,
-	"info":  LogLevelInfo,
-	"error": LogLevelError,
-	"none":  LogLevelNone,
-}
-
-// LogLevelToString transforms Level to its string representation.
-func LogLevelToString(l LogLevel) string {
-	if t, ok := levelToString[l]; ok {
-		return t
-	}
-	return ""
-}
 
 // LogEntry represents log entry.
 type LogEntry struct {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fasthttp/websocket"
@@ -90,12 +91,13 @@ func (t *websocketTransport) Write(data []byte) error {
 }
 
 func (t *websocketTransport) Close(disconnect *Disconnect) error {
-	t.mu.Lock()
+	t.mu.RLock()
 	if t.closed {
-		t.mu.Unlock()
+		t.mu.RUnlock()
+		return nil
 	}
 	t.closed = true
-	t.mu.Unlock()
+	t.mu.RUnlock()
 
 	if disconnect != nil {
 		reason, err := json.Marshal(disconnect)
@@ -289,7 +291,7 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		}()
 
 		var handleMu sync.RWMutex
-		var msgCount int
+		var msgCount int32
 
 		ticker := time.NewTicker(time.Second)
 		go func() {
@@ -299,6 +301,7 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 					msgCount = 0
 				case <-s.node.NotifyShutdown():
 					ticker.Stop()
+					return
 				}
 			}
 		}()
@@ -311,15 +314,18 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			}
 
 			go func() {
-				handleMu.RLock()
-				defer handleMu.RUnlock()
 
+				handleMu.RLock()
 				if msgCount >= 10 {
 					s.node.logger.log(NewLogEntry(LogLevelDebug, "client sent more than 10 messages in one second", map[string]interface{}{"client": client.uid}))
+					handleMu.RUnlock()
 					return
 				}
+				handleMu.RUnlock()
+
 				client.Handle(data)
-				msgCount++
+				atomic.AddInt32(&msgCount, 1)
+
 			}()
 		}
 	}()
