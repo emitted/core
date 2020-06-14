@@ -732,7 +732,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	}
 
-	if c.app.Options.JoinLeave {
+	if (getChannelType(channel) == "presence") && c.app.Options.JoinLeave {
 		err = c.node.broker.HandleSubscribe(chId, c.uid, &clientInfo, p)
 		if err != nil {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling subscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
@@ -758,56 +758,56 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return DisconnectServerError
 	}
 
-	//if getChannelType(p.Channel) == "presence" {
-	//
-	//	go func() {
-	//
-	//		var info webhooks.ClientInfo
-	//
-	//		if p.Data != nil {
-	//			info = webhooks.ClientInfo{
-	//				Id:   p.Data.Id,
-	//				Data: p.Data.Data,
-	//			}
-	//		}
-	//
-	//		joinWh := webhooks.PresenceAdded{
-	//			Channel: p.Channel,
-	//			Uid:     uid,
-	//			Info:    &info,
-	//		}
-	//
-	//		joinWhData, _ := joinWh.Marshal()
-	//
-	//		for _, webhook := range c.appID.Options.Webhooks {
-	//
-	//			if !webhook.Presence {
-	//				continue
-	//			}
-	//
-	//			wh := webhooks.Webhook{
-	//				Id:        0,
-	//				Signature: "",
-	//				Event:     webhooks.Event_PRESENCE_ADDED,
-	//				AppId:     c.appID.ID,
-	//				Url:       webhook.Url,
-	//				Data:      joinWhData,
-	//			}
-	//
-	//			whData, _ := wh.Marshal()
-	//
-	//			err := c.node.webhook.Enqueue(webhookRequest{
-	//				data: whData,
-	//			})
-	//			if err != nil {
-	//				c.node.logger.log(NewLogEntry(LogLevelError, "error enqueuing webhook", map[string]interface{}{"error": err.Error()}))
-	//			}
-	//
-	//		}
-	//
-	//	}()
-	//
-	//}
+	if getChannelType(p.Channel) == "presence" {
+
+		go func() {
+
+			var info webhooks.ClientInfo
+
+			if p.Data != nil {
+				info = webhooks.ClientInfo{
+					Id:   p.Data.Id,
+					Data: p.Data.Data,
+				}
+			}
+
+			joinWh := webhooks.PresenceAdded{
+				Channel: p.Channel,
+				Uid:     uid,
+				Info:    &info,
+			}
+
+			joinWhData, _ := joinWh.Marshal()
+
+			for _, webhook := range c.app.Options.Webhooks {
+
+				if !webhook.Presence {
+					continue
+				}
+
+				wh := webhooks.Webhook{
+					Id:        0,
+					Signature: "",
+					Event:     webhooks.Event_PRESENCE_ADDED,
+					AppId:     c.app.ID,
+					Url:       webhook.Url,
+					Data:      joinWhData,
+				}
+
+				whData, _ := wh.Marshal()
+
+				err := c.node.webhook.Enqueue(webhookRequest{
+					data: whData,
+				})
+				if err != nil {
+					c.node.logger.log(NewLogEntry(LogLevelError, "error enqueuing webhook", map[string]interface{}{"error": err.Error()}))
+				}
+
+			}
+
+		}()
+
+	}
 
 	return disconnect
 }
@@ -887,9 +887,11 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	clientInfo := c.clientInfo(p.Channel)
 
 	if !last {
-		err = c.node.broker.HandleUnsubscribe(chId, uid, clientInfo, r)
-		if err != nil {
-			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling unsubscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
+		if getChannelType(p.Channel) == "presence" && c.app.Options.JoinLeave {
+			err = c.node.broker.HandleUnsubscribe(chId, uid, clientInfo, r)
+			if err != nil {
+				c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling unsubscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
+			}
 		}
 	} else {
 		err := c.node.broker.RemChannel(app, p.Channel)
@@ -922,51 +924,53 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return DisconnectServerError
 	}
 
-	////////////
-	// Webhooks
-	////////////
+	//===== Webhooks ======//
 
-	go func() {
+	if getChannelType(p.Channel) == "presence" {
 
-		info := webhooks.ClientInfo{
-			Id:   clientInfo.Id,
-			Data: clientInfo.Data,
-		}
-		leaveWh := webhooks.PresenceRemoved{
-			Channel: p.Channel,
-			Uid:     uid,
-			Info:    &info,
-		}
+		go func() {
 
-		leaveWhData, _ := leaveWh.Marshal()
-		for _, webhook := range c.app.Options.Webhooks {
-
-			if !webhook.Presence {
-				continue
+			info := webhooks.ClientInfo{
+				Id:   clientInfo.Id,
+				Data: clientInfo.Data,
+			}
+			leaveWh := webhooks.PresenceRemoved{
+				Channel: p.Channel,
+				Uid:     uid,
+				Info:    &info,
 			}
 
-			wh := webhooks.Webhook{
-				Id:        0,
-				Signature: "",
-				Event:     webhooks.Event_PRESENCE_REMOVED,
-				AppId:     c.app.ID,
-				Url:       webhook.Url,
-				Data:      leaveWhData,
+			leaveWhData, _ := leaveWh.Marshal()
+			for _, webhook := range c.app.Options.Webhooks {
+
+				if !webhook.Presence {
+					continue
+				}
+
+				wh := webhooks.Webhook{
+					Id:        0,
+					Signature: "",
+					Event:     webhooks.Event_PRESENCE_REMOVED,
+					AppId:     c.app.ID,
+					Url:       webhook.Url,
+					Data:      leaveWhData,
+				}
+
+				whData, _ := wh.Marshal()
+
+				whR := webhookRequest{
+					data: whData,
+				}
+
+				err := c.node.webhook.Enqueue(whR)
+				if err != nil {
+
+				}
 			}
 
-			whData, _ := wh.Marshal()
+		}()
 
-			whR := webhookRequest{
-				data: whData,
-			}
-
-			err := c.node.webhook.Enqueue(whR)
-			if err != nil {
-
-			}
-		}
-
-	}()
+	}
 
 	return disconnect
 }

@@ -129,8 +129,8 @@ func (app *App) addSub(ch string, c *Client) bool {
 
 	first := false
 
-	//app.mu.Lock()
-	//defer app.mu.Unlock()
+	app.mu.Lock()
+	defer app.mu.Unlock()
 
 	_, ok := app.Channels[ch]
 
