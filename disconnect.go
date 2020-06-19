@@ -73,9 +73,9 @@ var (
 		Reconnect: false,
 	}
 
-	DisconnectSubscriptionEnded = &Disconnect{
+	DisconnectAppInactive = &Disconnect{
 		Code:      3014,
-		Reason:    "subscription to Emitted channels has ended",
+		Reason:    "this app is unavailable to connect",
 		Reconnect: false,
 	}
 )

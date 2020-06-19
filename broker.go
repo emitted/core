@@ -31,10 +31,8 @@ var (
 	getPresenceSource = `return redis.call("hget", KEYS[1], ARGV[1])`
 
 	updateStatsSource = `
-redis.call("hset", KEYS[1], ARGV[1], ARGV[2])
-redis.call("hset", KEYS[1], ARGV[3], ARGV[4])
-redis.call("hset", KEYS[1], ARGV[5], ARGV[6])
-redis.call("hset", KEYS[1], ARGV[7], ARGV[8])`
+redis.call("hincrby", KEYS[1], ARGV[1], ARGV[2])
+redis.call("hincrby", KEYS[1], ARGV[3], ARGV[4])`
 
 	statsSource = `return redis.call("hgetall", KEYS[1])`
 
@@ -186,8 +184,12 @@ func (b *Broker) GetPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return b.getShard(ch).getPresence(ch, uid)
 }
 
-func (b *Broker) UpdateStats(app string, stats AppStats) error {
-	return b.getShard(app).updateStats(app, stats)
+func (b *Broker) UpdateStats(app string, conns, msgs int) error {
+	return b.getShard(app).updateStats(app, conns, msgs)
+}
+
+func (b *Broker) RetrieveStats(app string) (int, int, error) {
+	return b.getShard(app).retrieveStats(app)
 }
 
 func (b *Broker) Channels(app string) ([]string, error) {
@@ -200,10 +202,6 @@ func (b *Broker) AddChannel(app, channel string) error {
 
 func (b *Broker) RemChannel(app, channel string) error {
 	return b.getShard(app).remChannel(app, channel)
-}
-
-func (b *Broker) AppStats(app string) (map[string]string, error) {
-	return b.getShard(app).appStats(app)
 }
 
 func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
@@ -331,14 +329,22 @@ func (s *shard) getPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return &clientInfo, resp.err
 }
 
-func (s *shard) updateStats(app string, stats AppStats) error {
+func (s *shard) updateStats(app string, conns, msgs int) error {
 	hashKey := s.statsHashKey(app)
 
-	dr := newDataRequest(dataOpUpdateStats, []interface{}{hashKey, "clients", stats.Connections, "messages", stats.Messages, "joins", stats.Join, "leaves", stats.Leave})
-
+	dr := newDataRequest(dataOpUpdateStats, []interface{}{hashKey, "connections", conns, "messages", msgs})
 	resp := s.getDataResponse(dr)
 
 	return resp.err
+}
+
+func (s *shard) retrieveStats(app string) (int, int, error) {
+	hashKey := s.statsHashKey(app)
+
+	dr := newDataRequest(dataOpRetrieveStats, []interface{}{hashKey})
+	resp := s.getDataResponse(dr)
+
+	return s.mapStringStats(resp.reply, nil)
 }
 
 func (s *shard) addChannel(app, channel string) error {
@@ -357,15 +363,6 @@ func (s *shard) remChannel(app, channel string) error {
 	resp := s.getDataResponse(dr)
 
 	return resp.err
-}
-
-func (s *shard) appStats(app string) (map[string]string, error) {
-	hashKey := s.statsHashKey(app)
-
-	dr := newDataRequest(dataOpStats, []interface{}{hashKey})
-	resp := s.getDataResponse(dr)
-
-	return s.mapStringStats(resp.reply, nil)
 }
 
 func (s *shard) mapStringClientInfoUid(reply interface{}, err error) (map[string]*clientproto.ClientInfo, error) {
@@ -429,34 +426,35 @@ func (s *shard) mapStringClientInfoId(reply interface{}, err error) (map[string]
 	return m, nil
 }
 
-func (s *shard) mapStringStats(reply interface{}, err error) (map[string]string, error) {
+func (s *shard) mapStringStats(reply interface{}, err error) (int, int, error) {
 	values, err := redis.Values(reply, err)
 
-	s.node.logger.log(NewLogEntry(LogLevelDebug, "", map[string]interface{}{"values": values}))
-
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
 	if len(values)%2 != 0 {
-		return nil, errors.New("mapStringStats expects even number of values result")
+		return 0, 0, errors.New("mapStringStats expects even number of values result")
 	}
 
-	stats := make(map[string]string, len(values))
+	stats := make(map[string]int, len(values))
 
 	for i := 0; i < len(values); i += 2 {
 		key, okKey := values[i].([]byte)
 		value, okValue := values[i+1].([]byte)
 
 		if !okKey || !okValue {
-			return nil, errors.New("scanMap key not a bulk string value")
+			return 0, 0, errors.New("scanMap key not a bulk string value")
 		}
 
-		stats[string(key)] = string(value)
+		integer, err := strconv.Atoi(string(value))
+		if err != nil {
+
+		}
+
+		stats[string(key)] = integer
 	}
 
-	s.node.logger.log(NewLogEntry(LogLevelDebug, "recieved stats", map[string]interface{}{"stats": stats}))
-
-	return stats, nil
+	return stats["connections"], stats["messages"], nil
 }
 
 func (s *shard) Channels(app string) ([]string, error) {
@@ -983,7 +981,7 @@ func (s *shard) RunDataPipeline() {
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
 				}
-			case dataOpStats:
+			case dataOpRetrieveStats:
 				err := s.statsScript.SendHash(conn, drs[i].args...)
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "stats", "error": err.Error()}))
@@ -1313,7 +1311,7 @@ const (
 	dataOpPresence
 	dataOpGetPresence
 	dataOpUpdateStats
-	dataOpStats
+	dataOpRetrieveStats
 	dataOpChannels
 	dataOpAddChannel
 	dataOpRemChannel

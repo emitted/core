@@ -83,7 +83,7 @@ func (w *webhookManager) runProducePipeline() {
 
 				select {
 				case w.producer.Input() <- msg:
-					w.node.logger.log(NewLogEntry(LogLevelDebug, "producing webhook", map[string]interface{}{"msg": msg}))
+					w.node.logger.log(NewLogEntry(LogLevelDebug, "producing webhooks", map[string]interface{}{"msg": msg}))
 				}
 
 			}
@@ -94,7 +94,7 @@ func (w *webhookManager) runProducePipeline() {
 	for {
 		select {
 		case err := <-w.producer.Errors():
-			w.node.logger.log(NewLogEntry(LogLevelError, "failed to produce webhook", map[string]interface{}{"error": err.Error()}))
+			w.node.logger.log(NewLogEntry(LogLevelError, "failed to produce webhooks", map[string]interface{}{"error": err.Error()}))
 		}
 	}
 }

@@ -54,7 +54,7 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 	for _, client := range h.apps[appKey].Channels[channelName].Clients {
 		client.messageWriter.enqueue(payload)
 
-		app.Stats.Messages++
+		app.stats.deltaMessages++
 	}
 
 }
@@ -114,7 +114,7 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 	for _, client := range h.apps[appKey].Channels[join.Channel].Clients {
 		client.messageWriter.enqueue(payload)
 
-		app.Stats.Messages++
+		app.stats.deltaMessages++
 	}
 
 }
@@ -153,7 +153,7 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 	for _, client := range h.apps[appKey].Channels[leave.Channel].Clients {
 		client.messageWriter.enqueue(payload)
 
-		app.Stats.Leave++
+		app.stats.deltaMessages++
 	}
 
 	h.node.logger.log(NewLogEntry(LogLevelDebug, "broadcasting leave", map[string]interface{}{"app": appKey, "channel": leave.Channel}))

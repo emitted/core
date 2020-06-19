@@ -20,9 +20,9 @@ type Node struct {
 
 	hub *Hub
 
-	mongo   *Mongo
-	broker  *Broker
-	webhook *webhookManager
+	mongo  *Mongo
+	broker *Broker
+	//webhooks *webhookManager
 
 	config Config
 	nodes  *nodeRegistry
@@ -54,7 +54,7 @@ func (n *Node) NotifyShutdown() chan struct{} {
 	return n.shutdownCh
 }
 
-func NewNode(c Config, brokerConfig *BrokerConfig, mongoConfig MongoConfig, kafkaConfig KafkaConfig) *Node {
+func NewNode(c Config, brokerConfig *BrokerConfig, mongoConfig MongoConfig) *Node {
 	uid := uuid.Must(uuid.NewV4()).String()
 
 	subLocks := make(map[int]*sync.Mutex, numSubLocks)
@@ -93,7 +93,7 @@ func NewNode(c Config, brokerConfig *BrokerConfig, mongoConfig MongoConfig, kafk
 
 	n.mongo = NewMongo(n, mongoConfig)
 
-	n.webhook = NewWebhookManager(n, kafkaConfig)
+	//n.webhooks = NewWebhookManager(n, kafkaConfig)
 
 	return n
 }
@@ -105,10 +105,10 @@ func (n *Node) Run() error {
 		return err
 	}
 
-	err = n.webhook.Run()
-	if err != nil {
-		return err
-	}
+	//err = n.webhooks.Run()
+	//if err != nil {
+	//	return err
+	//}
 
 	err = n.mongo.Run()
 	if err != nil {
@@ -228,9 +228,11 @@ func (n *Node) getApp(secret string) (*App, error) {
 		app.Clients = make(map[string]*Client)
 		app.Channels = make(map[string]*Channel)
 
-		app.Stats = AppStats{
-			Connections: 0,
-			Messages:    0,
+		app.stats = AppStats{
+			connections:      0,
+			deltaConnections: 0,
+			messages:         0,
+			deltaMessages:    0,
 		}
 		n.hub.AddApp(app)
 
@@ -262,12 +264,12 @@ func (n *Node) GetPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 	return n.broker.GetPresence(ch, uid)
 }
 
-func (n *Node) UpdateAppStats(app string, stats AppStats) error {
-	return n.broker.UpdateStats(app, stats)
+func (n *Node) UpdateAppStats(app string, conns, msgs int) error {
+	return n.broker.UpdateStats(app, conns, msgs)
 }
 
-func (n *Node) AppStats(app string) (map[string]string, error) {
-	return n.broker.AppStats(app)
+func (n *Node) RetrieveStats(app string) (int, int, error) {
+	return n.broker.RetrieveStats(app)
 }
 
 func (n *Node) Channels(app string) ([]string, error) {

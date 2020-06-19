@@ -7,10 +7,11 @@ import (
 )
 
 type AppStats struct {
-	Connections int
-	Messages    int
-	Join        int
-	Leave       int
+	connections int
+	messages    int
+
+	deltaConnections int
+	deltaMessages    int
 }
 
 type AppWebhook struct {
@@ -39,8 +40,7 @@ type App struct {
 	Credentials    []AppCredentials `bson:"credentials"`
 	MaxConnections int              `bson:"max_connections"`
 	MaxMessages    int              `bson:"max_messages"`
-
-	Due time.Time `bson:"due"`
+	Active         bool             `bson:"active"`
 
 	node *Node
 
@@ -49,13 +49,15 @@ type App struct {
 
 	Options AppOptions `bson:"options"`
 
-	Stats AppStats
+	stats AppStats
 
 	shutdown bool
 }
 
-func (app *App) CanHaveNewConns() bool {
-	if app.Stats.Connections < app.MaxConnections {
+func (app *App) canHaveNewConns() bool {
+
+	conns := app.stats.connections
+	if app.stats.connections < conns {
 		return true
 	}
 
@@ -85,7 +87,7 @@ func (app *App) Shutdown() {
 		}
 
 		for _, client := range channel.Clients {
-			err := client.Close(DisconnectSubscriptionEnded)
+			err := client.Close(DisconnectAppInactive)
 			if err != nil {
 				app.node.logger.log(NewLogEntry(LogLevelError, "error closing client on app shutdown", map[string]interface{}{"uid": client.uid, "error": err.Error()}))
 			}
@@ -95,34 +97,55 @@ func (app *App) Shutdown() {
 }
 
 func (app *App) run() {
+
+	conns, messages, err := app.node.RetrieveStats(app.ID)
+	if err != nil {
+		app.node.logger.log(NewLogEntry(LogLevelError, "error getting app stats", map[string]interface{}{"error": err.Error()}))
+	}
+
+	app.mu.Lock()
+	app.stats.connections = conns
+	app.stats.messages = messages
+
+	app.mu.Unlock()
+
 	ticker := time.NewTicker(time.Second * 10)
 
 	for {
 		select {
 		case <-ticker.C:
 
-			app.mu.Lock()
-			snapshot := app.Stats
-			app.mu.Unlock()
-
-			if !app.checkDue() {
+			app.mu.RLock()
+			if app.shutdown {
 				ticker.Stop()
-				app.Shutdown()
+				app.mu.RUnlock()
 				return
 			}
 
-			err := app.node.UpdateAppStats(app.ID, snapshot)
+			dConns := app.stats.deltaConnections
+			dMessages := app.stats.deltaMessages
+			app.mu.RUnlock()
+
+			err := app.node.UpdateAppStats(app.ID, dConns, dMessages)
 			if err != nil {
-				ticker.Stop()
 				app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"error": err.Error()}))
 			}
+
+			conns, messages, err := app.node.RetrieveStats(app.ID)
+			if err != nil {
+				app.node.logger.log(NewLogEntry(LogLevelError, "error getting app stats", map[string]interface{}{"error": err.Error()}))
+			}
+
+			app.mu.Lock()
+			app.stats.connections = conns
+			app.stats.messages = messages
+
+			app.stats.deltaConnections = 0
+			app.stats.deltaMessages = 0
+			app.mu.Unlock()
 		}
 	}
 
-}
-
-func (app *App) checkDue() bool {
-	return app.Due.Sub(time.Now()) > 0
 }
 
 func (app *App) addSub(ch string, c *Client) bool {
@@ -151,8 +174,8 @@ func (app *App) addSub(ch string, c *Client) bool {
 
 func (app *App) removeSub(ch string, uid string) (bool, error) {
 
-	//app.mu.Lock()
-	//defer app.mu.Unlock()
+	app.mu.Lock()
+	defer app.mu.Unlock()
 
 	if _, ok := app.Channels[ch]; !ok {
 		return false, errors.New("channel does not exist")
