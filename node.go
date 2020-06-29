@@ -1,12 +1,12 @@
 package core
 
 import (
+	"bitbucket.org/sireax/core/common/proto/clientproto"
+	"bitbucket.org/sireax/core/common/proto/nodeproto"
+	"bitbucket.org/sireax/core/common/uuid"
 	"context"
 	"github.com/FZambia/eagle"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sireax/core/common/proto/clientproto"
-	"github.com/sireax/core/common/proto/nodeproto"
-	"github.com/sireax/core/common/uuid"
 	"log"
 	"sync"
 	"time"

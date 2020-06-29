@@ -1,10 +1,10 @@
 package core
 
 import (
+	"bitbucket.org/sireax/core/common/proto/clientproto"
+	"bitbucket.org/sireax/core/common/timers"
 	"errors"
 	"fmt"
-	"github.com/sireax/core/common/proto/clientproto"
-	"github.com/sireax/core/common/timers"
 	"net"
 	"strconv"
 	"strings"

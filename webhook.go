@@ -1,8 +1,8 @@
 package core
 
 import (
+	"bitbucket.org/sireax/core/common/proto/webhooks"
 	"github.com/Shopify/sarama"
-	"github.com/sireax/core/common/proto/webhooks"
 	"time"
 )
 

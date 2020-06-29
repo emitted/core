@@ -1,8 +1,8 @@
 package core
 
 import (
+	"bitbucket.org/sireax/core/common/proto/clientproto"
 	"errors"
-	"github.com/sireax/core/common/proto/clientproto"
 )
 
 var (
