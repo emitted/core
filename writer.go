@@ -3,7 +3,7 @@ package core
 import (
 	"sync"
 
-	"bitbucket.org/sireax/core/common/queue"
+	"github.com/emitted/core/common/queue"
 )
 
 type writerConfig struct {

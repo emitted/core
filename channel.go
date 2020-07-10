@@ -1,8 +1,23 @@
 package core
 
 type Channel struct {
-	App  *App
-	Name string
+	app  *App
+	name string
 
-	Clients map[string]*Client
+	clients          map[string]*Client
+	clientPresenceID map[string]interface{}
+}
+
+func (c *Channel) presenceExists(id string) bool {
+	_, ok := c.clientPresenceID[id]
+
+	return ok
+}
+
+func (c *Channel) addID(id string) {
+	c.clientPresenceID[id] = nil
+}
+
+func (c *Channel) removeID(id string) {
+	delete(c.clientPresenceID, id)
 }

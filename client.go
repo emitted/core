@@ -1,10 +1,11 @@
 package core
 
 import (
-	"bitbucket.org/sireax/core/common/proto/clientproto"
-	"bitbucket.org/sireax/core/common/uuid"
 	"context"
+	"github.com/emitted/core/common/proto/clientproto"
+	"github.com/emitted/core/common/uuid"
 	"io"
+	"log"
 	"sync"
 	"time"
 )
@@ -125,7 +126,7 @@ func (c *Client) Connect(app *App) {
 	c.mu.Unlock()
 
 	app.mu.Lock()
-	app.Clients[c.uid] = c
+	app.clients[c.uid] = c
 	app.stats.deltaConnections++
 	app.mu.Unlock()
 
@@ -139,7 +140,7 @@ func (c *Client) Disconnect() {
 	uid := c.uid
 
 	c.app.mu.Lock()
-	delete(c.app.Clients, c.uid)
+	delete(c.app.clients, c.uid)
 	c.app.stats.deltaConnections--
 	c.app.mu.Unlock()
 
@@ -147,7 +148,7 @@ func (c *Client) Disconnect() {
 
 	numClientsGauge.Dec()
 
-	if len(c.app.Channels) == 0 && len(c.app.Clients) == 0 {
+	if len(c.app.channels) == 0 && len(c.app.clients) == 0 {
 		delete(c.node.hub.apps, c.app.ID)
 	}
 
@@ -160,7 +161,7 @@ func (c *Client) Subscribe(ch string) {
 		return
 	}
 
-	channel, ok := c.app.Channels[ch]
+	channel, ok := c.app.channels[ch]
 	c.mu.RUnlock()
 
 	if ok {
@@ -168,8 +169,6 @@ func (c *Client) Subscribe(ch string) {
 		c.channels[ch] = channel
 		c.mu.Unlock()
 	}
-
-	c.node.logger.log(NewLogEntry(LogLevelInfo, "currently subscribed to ", map[string]interface{}{"channels": c.channels}))
 
 }
 
@@ -697,6 +696,20 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 			return nil
 		}
 
+		ch, ok := c.app.channels[channel]
+		if ok {
+			if ch.presenceExists(p.Data.Id) {
+				err := rw.write(&clientproto.Reply{
+					Error: ErrorPresenceAlreadyExists,
+				})
+				if err != nil {
+					return DisconnectWriteError
+				}
+				return nil
+			}
+			log.Println(ch.clientPresenceID)
+		}
+
 		clientInfo = *p.Data
 
 	default:
@@ -727,6 +740,10 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error subscribing broker to channel", map[string]interface{}{"channelID": chId, "client": c.uid, "error": err.Error()}))
 		}
 
+	}
+
+	if getChannelType(channel) == "presence" {
+		c.channels[channel].addID(p.Data.Id)
 	}
 
 	if (getChannelType(channel) == "presence") && c.app.Options.JoinLeave {
@@ -822,6 +839,8 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 		Channel: p.Channel,
 	}
 
+	clientInfo := c.clientInfo(p.Channel)
+
 	switch getChannelType(p.Channel) {
 	case "private":
 	case "presence":
@@ -830,10 +849,11 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error removing presence", map[string]interface{}{"error": err.Error()}))
 		}
 
+		ch := c.channels[p.Channel]
+		ch.removeID(clientInfo.Id)
+
 	case "public":
 	}
-
-	clientInfo := c.clientInfo(p.Channel)
 
 	if !last {
 		if getChannelType(p.Channel) == "presence" && c.app.Options.JoinLeave {

@@ -1,8 +1,8 @@
 package core
 
 import (
-	"bitbucket.org/sireax/core/common/proto/clientproto"
 	"context"
+	"github.com/emitted/core/common/proto/clientproto"
 	"sync"
 )
 
@@ -51,7 +51,7 @@ func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clien
 
 	payload, _ := push.Marshal()
 
-	for _, client := range h.apps[appKey].Channels[channelName].Clients {
+	for _, client := range h.apps[appKey].channels[channelName].clients {
 		client.messageWriter.enqueue(payload)
 
 		app.stats.deltaMessages++
@@ -105,13 +105,13 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling push", map[string]interface{}{"error": err.Error()}))
 	}
 
-	_, ok = h.apps[appKey].Channels[join.Channel]
+	_, ok = h.apps[appKey].channels[join.Channel]
 	if !ok {
 		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting join: channel does not exist"))
 		return
 	}
 
-	for _, client := range h.apps[appKey].Channels[join.Channel].Clients {
+	for _, client := range h.apps[appKey].channels[join.Channel].clients {
 		client.messageWriter.enqueue(payload)
 
 		app.stats.deltaMessages++
@@ -144,13 +144,13 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling leave", map[string]interface{}{"error": err.Error()}))
 	}
 
-	_, ok = h.apps[appKey].Channels[leave.Channel]
+	_, ok = h.apps[appKey].channels[leave.Channel]
 	if !ok {
 		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting leave: channel does not exist"))
 		return
 	}
 
-	for _, client := range h.apps[appKey].Channels[leave.Channel].Clients {
+	for _, client := range h.apps[appKey].channels[leave.Channel].clients {
 		client.messageWriter.enqueue(payload)
 
 		app.stats.deltaMessages++
@@ -208,7 +208,7 @@ func (h *Hub) shutdown(ctx context.Context) error {
 func (h *Hub) Channels() []string {
 	channels := make([]string, 0)
 	for _, app := range h.apps {
-		for ch := range app.Channels {
+		for ch := range app.channels {
 			channels = append(channels, ch)
 		}
 	}
@@ -224,6 +224,6 @@ func (h *Hub) NumSubscribers(app, ch string) int {
 	if !ok {
 		return 0
 	}
-	conns := h.apps[app].Channels[ch].Clients
+	conns := h.apps[app].channels[ch].clients
 	return len(conns)
 }

@@ -1,8 +1,8 @@
 package core
 
 import (
-	"bitbucket.org/sireax/core/common/proto/clientproto"
 	"errors"
+	"github.com/emitted/common/proto/clientproto"
 )
 
 var (
@@ -66,6 +66,11 @@ var (
 	ErrorChannelNotPresence = &clientproto.Error{
 		Code:    111,
 		Message: "trying to get presence on non-presence channel",
+	}
+
+	ErrorPresenceAlreadyExists = &clientproto.Error{
+		Code:    112,
+		Message: "presence with given id already exists",
 	}
 )
 

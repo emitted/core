@@ -44,8 +44,8 @@ type App struct {
 
 	node *Node
 
-	Clients  map[string]*Client
-	Channels map[string]*Channel
+	clients  map[string]*Client
+	channels map[string]*Channel
 
 	Options AppOptions `bson:"options"`
 
@@ -73,9 +73,9 @@ func (app *App) Shutdown() {
 	app.shutdown = true
 	app.mu.Unlock()
 
-	channels := make(map[string]*Channel, len(app.Channels))
+	channels := make(map[string]*Channel, len(app.channels))
 
-	for name, channel := range app.Channels {
+	for name, channel := range app.channels {
 		channels[name] = channel
 	}
 
@@ -86,7 +86,7 @@ func (app *App) Shutdown() {
 			app.node.logger.log(NewLogEntry(LogLevelError, "error unsubscribing channel on app shutdown", map[string]interface{}{"app": app.ID, "error": err.Error()}))
 		}
 
-		for _, client := range channel.Clients {
+		for _, client := range channel.clients {
 			err := client.Close(DisconnectAppInactive)
 			if err != nil {
 				app.node.logger.log(NewLogEntry(LogLevelError, "error closing client on app shutdown", map[string]interface{}{"uid": client.uid, "error": err.Error()}))
@@ -155,7 +155,7 @@ func (app *App) addSub(ch string, c *Client) bool {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	_, ok := app.Channels[ch]
+	_, ok := app.channels[ch]
 
 	if !ok {
 		first = true
@@ -164,10 +164,10 @@ func (app *App) addSub(ch string, c *Client) bool {
 			return false
 		}
 
-		app.Channels[ch] = channel
+		app.channels[ch] = channel
 	}
 
-	app.Channels[ch].Clients[c.uid] = c
+	app.channels[ch].clients[c.uid] = c
 
 	return first
 }
@@ -177,18 +177,18 @@ func (app *App) removeSub(ch string, uid string) (bool, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	if _, ok := app.Channels[ch]; !ok {
+	if _, ok := app.channels[ch]; !ok {
 		return false, errors.New("channel does not exist")
 	}
 
 	lastClient := false
 
-	delete(app.Channels[ch].Clients, uid)
+	delete(app.channels[ch].clients, uid)
 
-	if len(app.Channels[ch].Clients) == 0 {
+	if len(app.channels[ch].clients) == 0 {
 		lastClient = true
 
-		delete(app.Channels, ch)
+		delete(app.channels, ch)
 	}
 
 	return lastClient, nil
@@ -197,9 +197,10 @@ func (app *App) removeSub(ch string, uid string) (bool, error) {
 func (app *App) makeChannel(name string) (*Channel, error) {
 
 	ch := &Channel{
-		Name:    name,
-		App:     app,
-		Clients: make(map[string]*Client),
+		name:             name,
+		app:              app,
+		clients:          make(map[string]*Client),
+		clientPresenceID: make(map[string]interface{}),
 	}
 
 	return ch, nil

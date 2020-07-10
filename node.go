@@ -1,11 +1,11 @@
 package core
 
 import (
-	"bitbucket.org/sireax/core/common/proto/clientproto"
-	"bitbucket.org/sireax/core/common/proto/nodeproto"
-	"bitbucket.org/sireax/core/common/uuid"
 	"context"
 	"github.com/FZambia/eagle"
+	"github.com/emitted/core/common/proto/clientproto"
+	"github.com/emitted/core/common/proto/nodeproto"
+	"github.com/emitted/core/common/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"log"
 	"sync"
@@ -225,8 +225,8 @@ func (n *Node) getApp(secret string) (*App, error) {
 	if !ok {
 
 		app.node = n
-		app.Clients = make(map[string]*Client)
-		app.Channels = make(map[string]*Channel)
+		app.clients = make(map[string]*Client)
+		app.channels = make(map[string]*Channel)
 
 		app.stats = AppStats{
 			connections:      0,
