@@ -2,7 +2,7 @@ package core
 
 import (
 	"errors"
-	"github.com/emitted/common/proto/clientproto"
+	"github.com/emitted/core/common/proto/clientproto"
 )
 
 var (
