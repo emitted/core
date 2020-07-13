@@ -100,15 +100,15 @@ func NewNode(c Config, brokerConfig *BrokerConfig, mongoConfig MongoConfig) *Nod
 
 func (n *Node) Run() error {
 
-	err := n.broker.Run()
-	if err != nil {
-		return err
-	}
-
 	//err = n.webhooks.Run()
 	//if err != nil {
 	//	return err
 	//}
+
+	err := n.broker.Run()
+	if err != nil {
+		return err
+	}
 
 	err = n.mongo.Run()
 	if err != nil {
@@ -236,7 +236,7 @@ func (n *Node) getApp(secret string) (*App, error) {
 		}
 		n.hub.AddApp(app)
 
-		go app.run()
+		go app.runStatsUpdate()
 
 		return app, nil
 	}

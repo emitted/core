@@ -265,6 +265,7 @@ func (c *Client) Expire() {
 }
 
 func (c *Client) Close(disconnect *Disconnect) error {
+
 	c.mu.RLock()
 
 	if c.closed {

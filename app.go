@@ -73,30 +73,46 @@ func (app *App) Shutdown() {
 	app.shutdown = true
 	app.mu.Unlock()
 
-	channels := make(map[string]*Channel, len(app.channels))
+	channels := make([]*Channel, 0, len(app.channels))
 
-	for name, channel := range app.channels {
-		channels[name] = channel
+	app.mu.Lock()
+	for _, channel := range app.channels {
+		channels = append(channels, channel)
 	}
+	app.mu.Unlock()
 
-	for name, channel := range channels {
-		chId := makeChId(app.ID, name)
-		err := app.node.broker.Unsubscribe(chId)
-		if err != nil {
-			app.node.logger.log(NewLogEntry(LogLevelError, "error unsubscribing channel on app shutdown", map[string]interface{}{"app": app.ID, "error": err.Error()}))
-		}
+	var wg sync.WaitGroup
 
-		for _, client := range channel.clients {
-			err := client.Close(DisconnectAppInactive)
+	for _, channel := range channels {
+
+		wg.Add(1)
+
+		go func(ch *Channel) {
+
+			chId := makeChId(app.ID, ch.name)
+			err := app.node.broker.Unsubscribe(chId)
 			if err != nil {
-				app.node.logger.log(NewLogEntry(LogLevelError, "error closing client on app shutdown", map[string]interface{}{"uid": client.uid, "error": err.Error()}))
+				app.node.logger.log(NewLogEntry(LogLevelError, "error unsubscribing channel on app shutdown", map[string]interface{}{"app": app.ID, "error": err.Error()}))
 			}
-		}
+
+			for _, client := range ch.clients {
+				err := client.Close(DisconnectShutdown)
+				if err != nil {
+					app.node.logger.log(NewLogEntry(LogLevelError, "error closing client on app shutdown", map[string]interface{}{"uid": client.uid, "error": err.Error()}))
+				}
+			}
+
+			wg.Done()
+
+		}(channel)
 	}
+	wg.Wait()
+
+	app.updateStats()
 
 }
 
-func (app *App) run() {
+func (app *App) runStatsUpdate() {
 
 	conns, messages, err := app.node.RetrieveStats(app.ID)
 	if err != nil {
@@ -115,37 +131,37 @@ func (app *App) run() {
 		select {
 		case <-ticker.C:
 
-			app.mu.RLock()
-			if app.shutdown {
-				ticker.Stop()
-				app.mu.RUnlock()
-				return
-			}
+			app.updateStats()
 
-			dConns := app.stats.deltaConnections
-			dMessages := app.stats.deltaMessages
-			app.mu.RUnlock()
-
-			err := app.node.UpdateAppStats(app.ID, dConns, dMessages)
-			if err != nil {
-				app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"error": err.Error()}))
-			}
-
-			conns, messages, err := app.node.RetrieveStats(app.ID)
-			if err != nil {
-				app.node.logger.log(NewLogEntry(LogLevelError, "error getting app stats", map[string]interface{}{"error": err.Error()}))
-			}
-
-			app.mu.Lock()
-			app.stats.connections = conns
-			app.stats.messages = messages
-
-			app.stats.deltaConnections = 0
-			app.stats.deltaMessages = 0
-			app.mu.Unlock()
 		}
 	}
 
+}
+
+func (app *App) updateStats() {
+
+	app.mu.RLock()
+	dConns := app.stats.deltaConnections
+	dMessages := app.stats.deltaMessages
+	app.mu.RUnlock()
+
+	err := app.node.UpdateAppStats(app.ID, dConns, dMessages)
+	if err != nil {
+		app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"error": err.Error()}))
+	}
+
+	conns, messages, err := app.node.RetrieveStats(app.ID)
+	if err != nil {
+		app.node.logger.log(NewLogEntry(LogLevelError, "error getting app stats", map[string]interface{}{"error": err.Error()}))
+	}
+
+	app.mu.Lock()
+	app.stats.connections = conns
+	app.stats.messages = messages
+
+	app.stats.deltaConnections = 0
+	app.stats.deltaMessages = 0
+	app.mu.Unlock()
 }
 
 func (app *App) addSub(ch string, c *Client) bool {
