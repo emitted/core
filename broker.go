@@ -32,15 +32,18 @@ var (
 
 	updateStatsSource = `
 redis.call("hincrby", KEYS[1], ARGV[1], ARGV[2])
-redis.call("hincrby", KEYS[1], ARGV[3], ARGV[4])`
+redis.call("hincrby", KEYS[1], ARGV[3], ARGV[4])
+`
 
-	statsSource = `return redis.call("hgetall", KEYS[1])`
+	retrieveStatsSource = `return redis.call("hgetall", KEYS[1])`
 
-	channelsSource = `return redis.call("lrange", KEYS[1], 0, 200)`
+	countChannelsSource = `return redis.call("scard", KEYS[1])`
 
-	addChannelSource = `return redis.call("lpush", KEYS[1], ARGV[1])`
+	channelsSource = `return redis.call("smembers", KEYS[1])`
 
-	remChannelSource = `return redis.call("lrem", KEYS[1], 1, ARGV[1])`
+	addChannelSource = `return redis.call("sadd", KEYS[1], ARGV[1])`
+
+	remChannelSource = `return redis.call("srem", KEYS[1], ARGV[1])`
 )
 
 type Broker struct {
@@ -64,15 +67,16 @@ type shard struct {
 	pubMessages  chan pubRequest
 	dataMessages chan dataRequest
 
-	getPresenceScript *redis.Script
-	presenceScript    *redis.Script
-	addPresenceScript *redis.Script
-	remPresenceScript *redis.Script
-	updateStatsScript *redis.Script
-	statsScript       *redis.Script
-	channelsScript    *redis.Script
-	addChannelScript  *redis.Script
-	remChannelScript  *redis.Script
+	getPresenceScript   *redis.Script
+	presenceScript      *redis.Script
+	addPresenceScript   *redis.Script
+	remPresenceScript   *redis.Script
+	updateStatsScript   *redis.Script
+	retrieveStatsScript *redis.Script
+	countChannelsScript *redis.Script
+	channelsScript      *redis.Script
+	addChannelScript    *redis.Script
+	remChannelScript    *redis.Script
 }
 
 type BrokerShardConfig struct {
@@ -100,7 +104,7 @@ func NewBroker(n *Node, config *BrokerConfig) (*Broker, error) {
 	}
 
 	for _, conf := range config.Shards {
-		shard, err := newShard(n, conf)
+		shard, err := NewShard(n, conf)
 		if err != nil {
 			return nil, err
 		}
@@ -202,6 +206,10 @@ func (b *Broker) AddChannel(app, channel string) error {
 
 func (b *Broker) RemChannel(app, channel string) error {
 	return b.getShard(app).remChannel(app, channel)
+}
+
+func (b *Broker) CountChannels(app string) (int, error) {
+	return b.getShard(app).countChannels(app)
 }
 
 func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
@@ -365,6 +373,51 @@ func (s *shard) remChannel(app, channel string) error {
 	return resp.err
 }
 
+func (s *shard) Channels(app string) ([]string, error) {
+
+	channelsHashKey := s.channelsHashKey(app)
+
+	dr := newDataRequest(dataOpChannels, []interface{}{channelsHashKey})
+	resp := s.getDataResponse(dr)
+
+	if resp.err != nil {
+		return nil, resp.err
+	}
+
+	values, err := redis.Values(resp.reply, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	channels := make([]string, 0, len(values))
+	for i := 0; i < len(values); i += 2 {
+		value, okValue := values[i].([]byte)
+		if !okValue {
+			return nil, errors.New("error getting ChannelID value")
+		}
+
+		channels = append(channels, string(value))
+	}
+
+	return channels, nil
+}
+
+func (s *shard) countChannels(app string) (int, error) {
+
+	channelsHashKey := s.channelsHashKey(app)
+
+	dr := newDataRequest(dataOpCountChannels, []interface{}{channelsHashKey})
+	resp := s.getDataResponse(dr)
+
+	if resp.err != nil {
+		return 0, resp.err
+	}
+
+	num := int(resp.reply.(int64))
+
+	return num, nil
+}
+
 func (s *shard) mapStringClientInfoUid(reply interface{}, err error) (map[string]*clientproto.ClientInfo, error) {
 	values, err := redis.Values(reply, err)
 
@@ -457,35 +510,6 @@ func (s *shard) mapStringStats(reply interface{}, err error) (int, int, error) {
 	return stats["connections"], stats["messages"], nil
 }
 
-func (s *shard) Channels(app string) ([]string, error) {
-
-	channelsHashKey := s.channelsHashKey(app)
-
-	dr := newDataRequest(dataOpChannels, []interface{}{channelsHashKey})
-	resp := s.getDataResponse(dr)
-
-	if resp.err != nil {
-		return nil, resp.err
-	}
-
-	values, err := redis.Values(resp.reply, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	channels := make([]string, 0, len(values))
-	for i := 0; i < len(values); i++ {
-		value, okValue := values[i].([]byte)
-		if !okValue {
-			return nil, errors.New("error getting ChannelID value")
-		}
-
-		channels = append(channels, string(value))
-	}
-
-	return channels, nil
-}
-
 func (s *shard) getDataResponse(r dataRequest) *dataResponse {
 	select {
 	case s.dataMessages <- r:
@@ -501,7 +525,7 @@ func (s *shard) getDataResponse(r dataRequest) *dataResponse {
 	return r.result()
 }
 
-func newShard(n *Node, conf BrokerShardConfig) (*shard, error) {
+func NewShard(n *Node, conf BrokerShardConfig) (*shard, error) {
 	shard := &shard{
 		node:   n,
 		config: conf,
@@ -512,15 +536,16 @@ func newShard(n *Node, conf BrokerShardConfig) (*shard, error) {
 		subMessages:  make(chan redis.Message),
 		dataMessages: make(chan dataRequest),
 
-		presenceScript:    redis.NewScript(1, presenceSource),
-		getPresenceScript: redis.NewScript(1, getPresenceSource),
-		addPresenceScript: redis.NewScript(1, addPresenceSource),
-		remPresenceScript: redis.NewScript(1, remPresenceSource),
-		updateStatsScript: redis.NewScript(1, updateStatsSource),
-		statsScript:       redis.NewScript(1, statsSource),
-		channelsScript:    redis.NewScript(1, channelsSource),
-		addChannelScript:  redis.NewScript(1, addChannelSource),
-		remChannelScript:  redis.NewScript(1, remChannelSource),
+		presenceScript:      redis.NewScript(1, presenceSource),
+		getPresenceScript:   redis.NewScript(1, getPresenceSource),
+		addPresenceScript:   redis.NewScript(1, addPresenceSource),
+		remPresenceScript:   redis.NewScript(1, remPresenceSource),
+		updateStatsScript:   redis.NewScript(1, updateStatsSource),
+		retrieveStatsScript: redis.NewScript(1, retrieveStatsSource),
+		channelsScript:      redis.NewScript(1, channelsSource),
+		addChannelScript:    redis.NewScript(1, addChannelSource),
+		remChannelScript:    redis.NewScript(1, remChannelSource),
+		countChannelsScript: redis.NewScript(1, countChannelsSource),
 	}
 	return shard, nil
 }
@@ -893,7 +918,7 @@ func (s *shard) RunDataPipeline() {
 		return
 	}
 
-	err = s.statsScript.Load(conn)
+	err = s.retrieveStatsScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading stats script", map[string]interface{}{"error": err}))
 		err := conn.Close()
@@ -926,6 +951,16 @@ func (s *shard) RunDataPipeline() {
 	err = s.remChannelScript.Load(conn)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error loading remove channel script", map[string]interface{}{"error": err}))
+		err := conn.Close()
+		if err != nil {
+			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
+		}
+		return
+	}
+
+	err = s.countChannelsScript.Load(conn)
+	if err != nil {
+		s.node.logger.log(NewLogEntry(LogLevelError, "error loading count channels script", map[string]interface{}{"error": err}))
 		err := conn.Close()
 		if err != nil {
 			s.node.logger.log(NewLogEntry(LogLevelError, "error closing connection", map[string]interface{}{"error": err.Error()}))
@@ -982,7 +1017,7 @@ func (s *shard) RunDataPipeline() {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
 				}
 			case dataOpRetrieveStats:
-				err := s.statsScript.SendHash(conn, drs[i].args...)
+				err := s.retrieveStatsScript.SendHash(conn, drs[i].args...)
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "stats", "error": err.Error()}))
 				}
@@ -998,6 +1033,11 @@ func (s *shard) RunDataPipeline() {
 				}
 			case dataOpRemChannel:
 				err := s.remChannelScript.SendHash(conn, drs[i].args...)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
+				}
+			case dataOpCountChannels:
+				err := s.countChannelsScript.SendHash(conn, drs[i].args...)
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error executing redis script", map[string]interface{}{"script": "update stats", "error": err.Error()}))
 				}
@@ -1315,6 +1355,7 @@ const (
 	dataOpChannels
 	dataOpAddChannel
 	dataOpRemChannel
+	dataOpCountChannels
 )
 
 type dataResponse struct {

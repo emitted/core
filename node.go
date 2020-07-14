@@ -276,6 +276,10 @@ func (n *Node) Channels(app string) ([]string, error) {
 	return n.broker.Channels(app)
 }
 
+func (n *Node) CountChannels(app string) (int, error) {
+	return n.broker.CountChannels(app)
+}
+
 func (n *Node) pubNode() error {
 
 	n.mu.RLock()
