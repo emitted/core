@@ -21,6 +21,11 @@ const (
 	defaultPoolSize       = 256
 )
 
+const (
+	serviceChannelNodeInfo = "--emitted-node-info"
+	serviceChannelPing     = "--emitted-ping"
+)
+
 var (
 	addPresenceSource = `redis.call("hset", KEYS[1], ARGV[1], ARGV[2])`
 
@@ -581,7 +586,7 @@ func (s *shard) runPublishPipeline() {
 		select {
 		case <-pingTicker.C:
 			conn := s.pool.Get()
-			err := conn.Send("PUBLISH", "pingchannel", nil)
+			err := conn.Send("PUBLISH", serviceChannelPing, nil)
 			if err != nil {
 				s.node.logger.log(NewLogEntry(LogLevelError, "error publishing to ping channel", map[string]interface{}{"error": err.Error()}))
 				err := conn.Close()
@@ -656,7 +661,7 @@ func (s *shard) runPubSub() {
 		Conn: conn,
 	}
 
-	err := psc.Subscribe("pingchannel")
+	err := psc.Subscribe(serviceChannelPing)
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error subscribing to ping channel", map[string]interface{}{"error": err.Error()}))
 	}
@@ -765,10 +770,9 @@ func (s *shard) runPubSub() {
 				select {
 				case message := <-s.subMessages:
 
-					switch ChannelID(message.Channel) {
-					case "ping":
-					case "node-info":
-
+					switch message.Channel {
+					case serviceChannelPing:
+					case serviceChannelNodeInfo:
 						s.node.handleNodeInfo(message.Data)
 
 					default:
@@ -820,8 +824,8 @@ func (s *shard) runPubSub() {
 
 	go func() {
 		chIDs := make([]string, 2)
-		chIDs[0] = "pingchannel"
-		chIDs[1] = "--emitted-node-info"
+		chIDs[0] = serviceChannelPing
+		chIDs[1] = serviceChannelNodeInfo
 
 		for _, ch := range s.node.hub.Channels() {
 			if s.broker.getShard(ch) == s {
@@ -1248,7 +1252,7 @@ func (s *shard) PublishNode(data []byte) error {
 	eChan := make(chan error, 1)
 
 	pr := pubRequest{
-		chId: "--emitted-node-info",
+		chId: serviceChannelNodeInfo,
 		data: data,
 		err:  eChan,
 	}

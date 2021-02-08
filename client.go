@@ -4,10 +4,16 @@ import (
 	"context"
 	"github.com/emitted/core/common/proto/clientproto"
 	"github.com/emitted/core/common/uuid"
+	"github.com/emitted/core/common/validation"
 	"io"
-	"log"
 	"sync"
 	"time"
+)
+
+const (
+	channelTypePublic   string = "public"
+	channelTypePrivate  string = "private"
+	channelTypePresence string = "presence"
 )
 
 type Client struct {
@@ -216,9 +222,10 @@ func (c *Client) unsubscribeForce(ch string) {
 		}
 
 		switch getChannelType(ch) {
-		case "private":
-		case "public":
-		case "presence":
+
+		case channelTypePrivate:
+		case channelTypePublic:
+		case channelTypePresence:
 
 			clientInfo := c.clientInfo(ch)
 
@@ -555,7 +562,7 @@ func (c *Client) handleConnect(data []byte, rw *replyWriter) *Disconnect {
 
 	c.node.logger.log(NewLogEntry(LogLevelDebug, "a client connected", map[string]interface{}{"uid": c.uid, "app": c.app.ID, "client": c.client, "version": c.version}))
 
-	expires := time.Now().Add(time.Hour).Unix()
+	expires := time.Now().Add(time.Hour * 6).Unix()
 	res := &clientproto.ConnectResult{
 		Uid:     c.uid,
 		Expires: expires,
@@ -616,8 +623,20 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	channel := p.Channel
+	signature := p.Signature
 
-	if channel == "" {
+	if channel == "" || signature == "" {
+		err := rw.write(&clientproto.Reply{
+			Error: ErrorBadRequest,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+
+		return nil
+	}
+
+	if ok := validation.ChannelName(channel); ok != true {
 		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
 		})
@@ -655,14 +674,14 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	var clientInfo clientproto.ClientInfo
 
 	switch getChannelType(channel) {
-	case "private":
+	case channelTypePrivate:
 
 		signatureVerified := false
 
 		for i := 0; i < len(appKeys); i++ {
 			if !signatureVerified {
-				signature := generateSignature(appID+":"+appKeys[i], uid, channel)
-				signatureVerified = verifySignature(signature, p.Signature)
+				genSignature := generateSignature(appID+":"+appKeys[i], uid, channel)
+				signatureVerified = verifySignature(genSignature, signature)
 			}
 		}
 
@@ -676,13 +695,32 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 			return nil
 		}
 
-	case "presence":
+	case channelTypePresence:
 
 		signatureVerified := false
+		if p.Data == nil {
+			err := rw.write(&clientproto.Reply{
+				Error: ErrorBadRequest,
+			})
+			if err != nil {
+				return DisconnectWriteError
+			}
+			return nil
+		}
+
+		if ok := validation.ClientData(p.Data); ok != true {
+			err := rw.write(&clientproto.Reply{
+				Error: ErrorBadRequest,
+			})
+			if err != nil {
+				return DisconnectWriteError
+			}
+			return nil
+		}
 
 		for i := 0; i < len(appKeys); i++ {
 			if !signatureVerified {
-				signature := generatePresenceSignature(appID+":"+appKeys[i], uid, channel, p.Data.Id, p.Data.Data)
+				signature := generatePresenceSignature(makeChId(appID, appKeys[i]), uid, channel, p.Data.Id, p.Data.Data)
 				signatureVerified = verifySignature(signature, p.Signature)
 			}
 		}
@@ -708,7 +746,6 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 				}
 				return nil
 			}
-			log.Println(ch.clientPresenceID)
 		}
 
 		clientInfo = *p.Data
@@ -723,7 +760,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	if len(clientInfo.Data) > 0 {
 		err := c.node.AddPresence(chId, c.uid, &clientInfo)
 		if err != nil {
-			c.node.logger.log(NewLogEntry(LogLevelError, "error adding presence", map[string]interface{}{"error": err.Error()}))
+			c.node.logger.log(NewLogEntry(LogLevelError, "error adding presence while subscribing", map[string]interface{}{"error": err.Error()}))
 		}
 	}
 
@@ -733,7 +770,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 		err := c.node.broker.AddChannel(appID, p.Channel)
 		if err != nil {
-			c.node.logger.log(NewLogEntry(LogLevelError, "error adding channel", map[string]interface{}{"error": err.Error()}))
+			c.node.logger.log(NewLogEntry(LogLevelError, "error adding channel while subscribing", map[string]interface{}{"error": err.Error()}))
 		}
 
 		err = c.node.broker.Subscribe(chId)
@@ -743,14 +780,14 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	}
 
-	if getChannelType(channel) == "presence" {
+	if getChannelType(channel) == channelTypePresence {
 		c.channels[channel].addID(p.Data.Id)
-	}
 
-	if (getChannelType(channel) == "presence") && c.app.Options.JoinLeave {
-		err = c.node.broker.HandleSubscribe(chId, c.uid, &clientInfo, p)
-		if err != nil {
-			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling subscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
+		if c.app.Options.JoinLeave {
+			err = c.node.broker.HandleSubscribe(chId, c.uid, &clientInfo, p)
+			if err != nil {
+				c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling subscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
+			}
 		}
 	}
 
@@ -801,12 +838,12 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return DisconnectBadRequest
 	}
 
-	if p.Channel == "" {
+	if ok := validation.ChannelName(p.Channel); ok != true {
 		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
 		})
 		if err != nil {
-			return DisconnectServerError
+			return DisconnectWriteError
 		}
 		return nil
 	}
@@ -843,8 +880,8 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	clientInfo := c.clientInfo(p.Channel)
 
 	switch getChannelType(p.Channel) {
-	case "private":
-	case "presence":
+	case channelTypePrivate:
+	case channelTypePresence:
 		err := c.node.RemovePresence(p.Channel, uid)
 		if err != nil {
 			c.node.logger.log(NewLogEntry(LogLevelError, "error removing presence", map[string]interface{}{"error": err.Error()}))
@@ -853,11 +890,11 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 		ch := c.channels[p.Channel]
 		ch.removeID(clientInfo.Id)
 
-	case "public":
+	case channelTypePublic:
 	}
 
 	if !last {
-		if getChannelType(p.Channel) == "presence" && c.app.Options.JoinLeave {
+		if getChannelType(p.Channel) == channelTypePresence && c.app.Options.JoinLeave {
 			err = c.node.broker.HandleUnsubscribe(chId, uid, clientInfo, r)
 			if err != nil {
 				c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling unsubscribe", map[string]interface{}{"channelId": chId, "error": err.Error()}))
@@ -932,6 +969,26 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 		return DisconnectBadRequest
 	}
 
+	if ok := validation.ChannelName(p.Channel); ok != true {
+		err := rw.write(&clientproto.Reply{
+			Error: ErrorBadRequest,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+		return nil
+	}
+
+	if ok := validation.TopicName(p.Topic); ok != true {
+		err := rw.write(&clientproto.Reply{
+			Error: ErrorBadRequest,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+		return nil
+	}
+
 	_, ok := c.channels[p.Channel]
 	if !ok {
 		err := rw.write(&clientproto.Reply{
@@ -992,7 +1049,9 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 		return DisconnectBadRequest
 	}
 
-	if p.Channel == "" {
+	channel := p.Channel
+
+	if channel == "" {
 
 		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
@@ -1002,8 +1061,18 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 		}
 	}
 
+	if ok := validation.ChannelName(channel); ok != true {
+		err := rw.write(&clientproto.Reply{
+			Error: ErrorBadRequest,
+		})
+		if err != nil {
+			return DisconnectWriteError
+		}
+		return nil
+	}
+
 	switch getChannelType(p.Channel) {
-	case "presence":
+	case channelTypePresence:
 	default:
 		err := rw.write(&clientproto.Reply{
 			Error: ErrorChannelNotPresence,
@@ -1014,7 +1083,7 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	c.mu.Lock()
-	_, ok := c.channels[p.Channel]
+	_, ok := c.channels[channel]
 	c.mu.Unlock()
 
 	if !ok {
@@ -1030,7 +1099,7 @@ func (c *Client) handlePresence(data []byte, rw *replyWriter) *Disconnect {
 	app := c.app.ID
 	c.mu.RUnlock()
 
-	chId := makeChId(app, p.Channel)
+	chId := makeChId(app, channel)
 
 	presence, err := c.node.Presence(chId)
 	if err != nil {

@@ -19,26 +19,15 @@ func makeChId(app string, chName string) string {
 	return app + ":" + chName
 }
 
-func ChannelID(key string) string {
-	switch key {
-	case "pingchannel":
-		return "ping"
-	case "--emitted-node-info":
-		return "node-info"
-	default:
-		return key
-	}
-}
-
 func getChannelType(ch string) string {
 
 	switch true {
 	case strings.HasPrefix(ch, "private-"):
-		return "private"
+		return channelTypePrivate
 	case strings.HasPrefix(ch, "presence-"):
-		return "presence"
+		return channelTypePresence
 	default:
-		return "public"
+		return channelTypePublic
 	}
 }
 
