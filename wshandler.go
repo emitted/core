@@ -197,7 +197,7 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	app, err := s.node.getApp(secret)
 	if err != nil {
 		rw.WriteHeader(http.StatusForbidden)
-		s.node.logger.log(NewLogEntry(LogLevelError, "client error connecting to app", map[string]interface{}{"error": err.Error()}))
+		s.node.logger.log(NewLogEntry(LogLevelError, "client failed connecting to app", map[string]interface{}{"error": err.Error()}))
 		return
 	}
 

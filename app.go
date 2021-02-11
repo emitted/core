@@ -65,21 +65,21 @@ func (app *App) canHaveNewConns() bool {
 }
 
 func (app *App) Shutdown() {
-	app.mu.Lock()
+	app.mu.RLock()
 	if app.shutdown {
-		app.mu.Unlock()
+		app.mu.RUnlock()
 		return
 	}
 	app.shutdown = true
-	app.mu.Unlock()
+	app.mu.RUnlock()
 
 	channels := make([]*Channel, 0, len(app.channels))
 
-	app.mu.Lock()
+	app.mu.RLock()
 	for _, channel := range app.channels {
 		channels = append(channels, channel)
 	}
-	app.mu.Unlock()
+	app.mu.RUnlock()
 
 	var wg sync.WaitGroup
 
@@ -108,7 +108,11 @@ func (app *App) Shutdown() {
 	}
 	wg.Wait()
 
-	app.updateStats()
+	app.clearStats()
+
+	app.mu.RLock()
+	app.shutdown = false
+	app.mu.RUnlock()
 
 }
 
@@ -162,6 +166,13 @@ func (app *App) updateStats() {
 	app.stats.deltaConnections = 0
 	app.stats.deltaMessages = 0
 	app.mu.Unlock()
+}
+
+func (app *App) clearStats() {
+	err := app.node.ClearAppStats(app.ID)
+	if err != nil {
+		app.node.logger.log(NewLogEntry(LogLevelError, "error clearing app stats", map[string]interface{}{"error": err.Error()}))
+	}
 }
 
 func (app *App) addSub(ch string, c *Client) bool {

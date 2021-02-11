@@ -265,7 +265,11 @@ func (n *Node) GetPresence(ch, uid string) (*clientproto.ClientInfo, error) {
 }
 
 func (n *Node) UpdateAppStats(app string, conns, msgs int) error {
-	return n.broker.UpdateStats(app, conns, msgs)
+	return n.broker.UpdateAppStats(app, conns, msgs)
+}
+
+func (n *Node) ClearAppStats(app string) error {
+	return n.broker.ClearAppStats(app)
 }
 
 func (n *Node) RetrieveStats(app string) (int, int, error) {
