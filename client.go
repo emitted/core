@@ -622,7 +622,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		return nil
 	}
 
-	if p.Channel == "" || p.Signature == "" {
+	if p.Channel == "" {
 		err := rw.write(&clientproto.Reply{
 			Error: ErrorBadRequest,
 		})
@@ -649,7 +649,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	c.mu.RUnlock()
 
 	if ok {
-		c.node.logger.log(NewLogEntry(LogLevelInfo, "client tried to subscribe to already subscribed channel", map[string]interface{}{"uid": c.uid, "client": c.client, "app": c.app.ID, "channel": p.Channel}))
+		c.node.logger.log(NewLogEntry(LogLevelDebug, "client already subscribed", map[string]interface{}{"uid": c.uid, "client": c.client, "app": c.app.ID, "channel": p.Channel}))
 		err := rw.write(&clientproto.Reply{
 			Error: ErrorAlreadySubscribed,
 		})
@@ -674,6 +674,17 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	switch getChannelType(p.Channel) {
 	case channelTypePrivate:
 
+		if p.Signature == "" {
+			err := rw.write(&clientproto.Reply{
+				Error: ErrorBadRequest,
+			})
+			if err != nil {
+				return DisconnectWriteError
+			}
+
+			return nil
+		}
+
 		signatureVerified := false
 
 		for i := 0; i < len(appKeys); i++ {
@@ -696,6 +707,17 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 		}
 
 	case channelTypePresence:
+
+		if p.Signature == "" || p.Data == nil {
+			err := rw.write(&clientproto.Reply{
+				Error: ErrorBadRequest,
+			})
+			if err != nil {
+				return DisconnectWriteError
+			}
+
+			return nil
+		}
 
 		signatureVerified := false
 		if p.Data == nil {
@@ -881,16 +903,16 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	switch getChannelType(p.Channel) {
 	case channelTypePrivate:
+	case channelTypePublic:
 	case channelTypePresence:
-		err := c.node.RemovePresence(p.Channel, uid)
+
+		err := c.node.RemovePresence(chId, uid)
 		if err != nil {
-			c.node.logger.log(NewLogEntry(LogLevelError, "error removing presence", map[string]interface{}{"uid": c.uid, "client": c.client, "app": c.app.ID, "channel": p.Channel, "error": err.Error()}))
+			c.node.logger.log(NewLogEntry(LogLevelError, "error removing presence while unsubscribing", map[string]interface{}{"uid": uid, "client": c.client, "app": c.app.ID, "channel": p.Channel, "error": err.Error()}))
 		}
 
 		ch := c.channels[p.Channel]
 		ch.removeID(clientInfo.Id)
-
-	case channelTypePublic:
 	}
 
 	if !last {

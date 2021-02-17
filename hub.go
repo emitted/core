@@ -187,7 +187,7 @@ func (h *Hub) shutdown(ctx context.Context) error {
 		go func(aapp *App) {
 			defer func() { <-sem }()
 			defer func() { closeFinishedCh <- struct{}{} }()
-			aapp.Shutdown()
+			aapp.Shutdown(DisconnectServerError)
 		}(app)
 	}
 

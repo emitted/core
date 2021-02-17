@@ -23,9 +23,9 @@ type AppWebhook struct {
 }
 
 type AppOptions struct {
-	ClientPublications bool         `bson:"client_publications"`
-	JoinLeave          bool         `bson:"join_leave"`
-	Webhooks           []AppWebhook `bson:"webhooks"`
+	ClientPublications bool `bson:"client_publications"`
+	JoinLeave          bool `bson:"join_leave"`
+	//Webhooks           []AppWebhook `bson:"webhooks"`
 }
 
 type AppCredentials struct {
@@ -64,7 +64,7 @@ func (app *App) canHaveNewConns() bool {
 	return false
 }
 
-func (app *App) Shutdown() {
+func (app *App) Shutdown(disconnect *Disconnect) {
 	app.mu.RLock()
 	if app.shutdown {
 		app.mu.RUnlock()
@@ -73,38 +73,30 @@ func (app *App) Shutdown() {
 	app.shutdown = true
 	app.mu.RUnlock()
 
-	channels := make([]*Channel, 0, len(app.channels))
+	clients := make([]*Client, 0, len(app.clients))
 
 	app.mu.RLock()
-	for _, channel := range app.channels {
-		channels = append(channels, channel)
+	for _, channel := range app.clients {
+		clients = append(clients, channel)
 	}
 	app.mu.RUnlock()
 
 	var wg sync.WaitGroup
 
-	for _, channel := range channels {
+	for _, c := range clients {
 
 		wg.Add(1)
 
-		go func(ch *Channel) {
+		go func(client *Client) {
 
-			chId := makeChId(app.ID, ch.name)
-			err := app.node.broker.Unsubscribe(chId)
+			err := client.Close(disconnect)
 			if err != nil {
-				app.node.logger.log(NewLogEntry(LogLevelError, "error unsubscribing channel on app shutdown", map[string]interface{}{"app": app.ID, "error": err.Error()}))
-			}
-
-			for _, client := range ch.clients {
-				err := client.Close(DisconnectShutdown)
-				if err != nil {
-					app.node.logger.log(NewLogEntry(LogLevelError, "error closing client on app shutdown", map[string]interface{}{"uid": client.uid, "error": err.Error()}))
-				}
+				app.node.logger.log(NewLogEntry(LogLevelError, "error closing client on app shutdown", map[string]interface{}{"uid": client.uid, "error": err.Error()}))
 			}
 
 			wg.Done()
 
-		}(channel)
+		}(c)
 	}
 	wg.Wait()
 
@@ -123,20 +115,17 @@ func (app *App) runStatsUpdate() {
 		app.node.logger.log(NewLogEntry(LogLevelError, "error getting app stats", map[string]interface{}{"error": err.Error()}))
 	}
 
-	app.mu.Lock()
+	app.mu.RLock()
 	app.stats.connections = conns
 	app.stats.messages = messages
-
-	app.mu.Unlock()
+	app.mu.RUnlock()
 
 	ticker := time.NewTicker(time.Second * 10)
 
 	for {
 		select {
 		case <-ticker.C:
-
 			app.updateStats()
-
 		}
 	}
 

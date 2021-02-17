@@ -39,6 +39,7 @@ var (
 redis.call("hincrby", KEYS[1], ARGV[1], ARGV[2])
 redis.call("hincrby", KEYS[1], ARGV[3], ARGV[4])
 `
+
 	clearAppStatsSource = `return redis.call("hset", KEYS[1], ARGV[1], ARGV[2])`
 
 	retrieveStatsSource = `return redis.call("hgetall", KEYS[1])`
