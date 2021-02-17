@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"github.com/emitted/core/common/tickers"
 	"sync"
 	"time"
 )
@@ -51,7 +52,8 @@ type App struct {
 
 	stats AppStats
 
-	shutdown bool
+	shutdown   bool
+	shutdownCh chan struct{}
 }
 
 func (app *App) canHaveNewConns() bool {
@@ -71,6 +73,7 @@ func (app *App) Shutdown(disconnect *Disconnect) {
 		return
 	}
 	app.shutdown = true
+	close(app.shutdownCh)
 	app.mu.RUnlock()
 
 	clients := make([]*Client, 0, len(app.clients))
@@ -108,6 +111,10 @@ func (app *App) Shutdown(disconnect *Disconnect) {
 
 }
 
+func (app *App) NotifyShutdown() chan struct{} {
+	return app.shutdownCh
+}
+
 func (app *App) runStatsUpdate() {
 
 	conns, messages, err := app.node.RetrieveStats(app.ID)
@@ -120,18 +127,23 @@ func (app *App) runStatsUpdate() {
 	app.stats.messages = messages
 	app.mu.RUnlock()
 
-	ticker := time.NewTicker(time.Second * 10)
+	ticker := tickers.SetTicker(time.Second * 10)
 
 	for {
 		select {
 		case <-ticker.C:
-			app.updateStats()
+			err := app.updateStats()
+			if err != nil {
+				app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"app": app.ID}))
+			}
+		case <-app.NotifyShutdown():
+			tickers.ReleaseTicker(ticker)
 		}
 	}
 
 }
 
-func (app *App) updateStats() {
+func (app *App) updateStats() error {
 
 	app.mu.RLock()
 	dConns := app.stats.deltaConnections
@@ -140,12 +152,12 @@ func (app *App) updateStats() {
 
 	err := app.node.UpdateAppStats(app.ID, dConns, dMessages)
 	if err != nil {
-		app.node.logger.log(NewLogEntry(LogLevelError, "error updating app stats", map[string]interface{}{"error": err.Error()}))
+		return err
 	}
 
 	conns, messages, err := app.node.RetrieveStats(app.ID)
 	if err != nil {
-		app.node.logger.log(NewLogEntry(LogLevelError, "error getting app stats", map[string]interface{}{"error": err.Error()}))
+		return err
 	}
 
 	app.mu.Lock()
@@ -155,6 +167,8 @@ func (app *App) updateStats() {
 	app.stats.deltaConnections = 0
 	app.stats.deltaMessages = 0
 	app.mu.Unlock()
+
+	return nil
 }
 
 func (app *App) clearStats() {

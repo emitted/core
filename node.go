@@ -227,6 +227,7 @@ func (n *Node) getApp(secret string) (*App, error) {
 		app.node = n
 		app.clients = make(map[string]*Client)
 		app.channels = make(map[string]*Channel)
+		app.shutdownCh = make(chan struct{}, 1)
 
 		app.stats = AppStats{
 			connections:      0,
