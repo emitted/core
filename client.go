@@ -469,23 +469,35 @@ func (c *Client) HandleCommand(cmd *clientproto.Command, write func(reply *clien
 
 	switch cmd.Type {
 	case clientproto.MethodType_CONNECT:
-		cmdType = "connect"
+
+		cmdType = MetricsCommandTypeConnect
 		disconnect = c.handleConnect(cmd.Data, rw)
+
 	case clientproto.MethodType_SUBSCRIBE:
-		cmdType = "subscribe"
+
+		cmdType = MetricsCommandTypeSubscribe
 		disconnect = c.handleSubscribe(cmd.Data, rw)
+
 	case clientproto.MethodType_UNSUBSCRIBE:
-		cmdType = "unsubscribe"
+
+		cmdType = MetricsCommandTypeUnsubscribe
 		disconnect = c.handleUnsubscribe(cmd.Data, rw)
+
 	case clientproto.MethodType_PUBLISH:
-		cmdType = "publish"
+
+		cmdType = MetricsCommandTypePublish
 		disconnect = c.handlePublish(cmd.Data, rw)
+
 	case clientproto.MethodType_PRESENCE:
-		cmdType = "presence"
+
+		cmdType = MetricsCommandTypePresence
 		disconnect = c.handlePresence(cmd.Data, rw)
+
 	case clientproto.MethodType_PING:
-		cmdType = "ping"
+
+		cmdType = MetricsCommandTypePing
 		disconnect = c.handlePing(cmd.Data, rw)
+
 	default:
 		c.node.logger.log(NewLogEntry(LogLevelError, "client sent unknown command", map[string]interface{}{"uid": c.uid, "client": c.client}))
 		err := rw.write(&clientproto.Reply{
@@ -803,10 +815,19 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	if getChannelType(p.Channel) == channelTypePresence {
+
 		c.channels[p.Channel].addID(p.Data.Id)
 
+		c.node.logger.log(NewLogEntry(LogLevelDebug, "", map[string]interface{}{"data": c.channels[p.Channel].clientPresenceID}))
+
 		if c.app.Options.JoinLeave {
-			err = c.node.broker.HandleSubscribe(chId, c.uid, &clientInfo, p)
+
+			excludedUid := ""
+			if c.app.Options.ExcludeSender == true {
+				excludedUid = c.uid
+			}
+
+			err = c.node.broker.HandleSubscribe(chId, &clientInfo, p, excludedUid)
 			if err != nil {
 				c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling subscribe", map[string]interface{}{"uid": c.uid, "client": c.client, "app": c.app.ID, "channel": p.Channel, "error": err.Error()}))
 			}
@@ -917,7 +938,13 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 	if !last {
 		if getChannelType(p.Channel) == channelTypePresence && c.app.Options.JoinLeave {
-			err = c.node.broker.HandleUnsubscribe(chId, uid, clientInfo, r)
+
+			excludedUid := ""
+			if c.app.Options.ExcludeSender == true {
+				excludedUid = c.uid
+			}
+
+			err = c.node.broker.HandleUnsubscribe(chId, clientInfo, r, excludedUid)
 			if err != nil {
 				c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling unsubscribe", map[string]interface{}{"uid": c.uid, "client": c.client, "app": c.app.ID, "channel": p.Channel, "error": err.Error()}))
 			}
@@ -1030,7 +1057,11 @@ func (c *Client) handlePublish(data []byte, rw *replyWriter) *Disconnect {
 
 	chId := makeChId(app, p.Channel)
 
-	err = c.node.broker.Publish(chId, clientInfo, p)
+	excludedUid := ""
+	if c.app.Options.ExcludeSender == true {
+		excludedUid = c.uid
+	}
+	err = c.node.broker.Publish(chId, clientInfo, p, excludedUid)
 	if err != nil {
 		c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling publication", map[string]interface{}{"uid": c.uid, "client": c.client, "app": c.app.ID, "channel": p.Channel, "error": err.Error()}))
 	}

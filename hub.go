@@ -31,34 +31,6 @@ func (h *Hub) AddApp(app *App) {
 	h.mu.RUnlock()
 }
 
-func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clientproto.Publication) {
-
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	app, ok := h.apps[appKey]
-	if !ok {
-		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting publication", map[string]interface{}{"error": "app is not found"}))
-		return
-	}
-
-	data, _ := pub.Marshal()
-
-	push := &clientproto.Event{
-		Type: clientproto.EventType_PUBLICATION,
-		Data: data,
-	}
-
-	payload, _ := push.Marshal()
-
-	for _, client := range h.apps[appKey].channels[channelName].clients {
-		client.messageWriter.enqueue(payload)
-
-		app.stats.deltaMessages++
-	}
-
-}
-
 func (h *Hub) addSub(uid string, c *Client) {
 	h.mu.Lock()
 	if _, ok := h.conns[uid]; ok {
@@ -80,7 +52,38 @@ func (h *Hub) remSub(uid string) {
 	h.mu.Unlock()
 }
 
-func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
+func (h *Hub) BroadcastPublication(appKey string, channelName string, pub *clientproto.Publication, excludedUid string) {
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	app, ok := h.apps[appKey]
+	if !ok {
+		h.node.logger.log(NewLogEntry(LogLevelError, "error broadcasting publication", map[string]interface{}{"error": "app is not found"}))
+		return
+	}
+
+	data, _ := pub.Marshal()
+
+	push := &clientproto.Event{
+		Type: clientproto.EventType_PUBLICATION,
+		Data: data,
+	}
+
+	payload, _ := push.Marshal()
+
+	for uid, client := range h.apps[appKey].channels[channelName].clients {
+		if uid == excludedUid {
+			continue
+		}
+		client.messageWriter.enqueue(payload)
+
+		app.stats.deltaMessages++
+	}
+
+}
+
+func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join, excludedUid string) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -111,7 +114,10 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 		return
 	}
 
-	for _, client := range h.apps[appKey].channels[join.Channel].clients {
+	for uid, client := range h.apps[appKey].channels[join.Channel].clients {
+		if uid == excludedUid {
+			continue
+		}
 		client.messageWriter.enqueue(payload)
 
 		app.stats.deltaMessages++
@@ -119,7 +125,7 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join) {
 
 }
 
-func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
+func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave, excludedUid string) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -150,7 +156,10 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave) {
 		return
 	}
 
-	for _, client := range h.apps[appKey].channels[leave.Channel].clients {
+	for uid, client := range h.apps[appKey].channels[leave.Channel].clients {
+		if uid == excludedUid {
+			continue
+		}
 		client.messageWriter.enqueue(payload)
 
 		app.stats.deltaMessages++

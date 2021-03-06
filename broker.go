@@ -160,24 +160,24 @@ func (b *Broker) Unsubscribe(chId string) error {
 	return b.getShard(chId).Unsubscribe([]string{chId})
 }
 
-func (b *Broker) Publish(chId string, clientInfo *clientproto.ClientInfo, p *clientproto.PublishRequest) error {
-	return b.getShard(chId).handlePublish(chId, clientInfo, p)
+func (b *Broker) Publish(chId string, clientInfo *clientproto.ClientInfo, p *clientproto.PublishRequest, excludedUid string) error {
+	return b.getShard(chId).handlePublish(chId, clientInfo, p, excludedUid)
 }
 
-func (b *Broker) HandleSubscribe(chId string, uid string, clientInfo *clientproto.ClientInfo, r *clientproto.SubscribeRequest) error {
-	return b.getShard(chId).handleSubscribe(chId, uid, clientInfo, r)
+func (b *Broker) HandleSubscribe(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.SubscribeRequest, excludedUid string) error {
+	return b.getShard(chId).handleSubscribe(chId, clientInfo, r, excludedUid)
 }
 
-func (b *Broker) HandleUnsubscribe(chId string, uid string, clientInfo *clientproto.ClientInfo, r *clientproto.UnsubscribeRequest) error {
-	return b.getShard(chId).handleUnsubscribe(chId, uid, clientInfo, r)
+func (b *Broker) HandleUnsubscribe(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.UnsubscribeRequest, excludedUid string) error {
+	return b.getShard(chId).handleUnsubscribe(chId, clientInfo, r, excludedUid)
 }
 
 func (b *Broker) PublishJoin(chId string, join *clientproto.Join) error {
-	return b.getShard(chId).PublishJoin(chId, join)
+	return b.getShard(chId).PublishJoin(chId, join, "")
 }
 
 func (b *Broker) PublishLeave(chId string, leave *clientproto.Leave) error {
-	return b.getShard(chId).PublishLeave(chId, leave)
+	return b.getShard(chId).PublishLeave(chId, leave, "")
 }
 
 func (b *Broker) AddPresence(ch string, uid string, clientInfo *clientproto.ClientInfo) error {
@@ -794,44 +794,44 @@ func (s *shard) runPubSub() {
 
 					default:
 
-						var push clientproto.Event
-						err := push.Unmarshal(message.Data)
+						var packet clientproto.Packet
+						err := packet.Unmarshal(message.Data)
 						if err != nil {
 							s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling push from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
 						}
 
 						appKey, channelName := parseChId(message.Channel)
 
-						switch push.Type {
+						switch packet.Type {
 						case clientproto.EventType_PUBLICATION:
 
 							var pub clientproto.Publication
-							err := pub.Unmarshal(push.Data)
+							err := pub.Unmarshal(packet.Data)
 							if err != nil {
 								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling publication from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
 							}
 
-							s.node.hub.BroadcastPublication(appKey, channelName, &pub)
+							s.node.hub.BroadcastPublication(appKey, channelName, &pub, packet.ExcludedUid)
 
 						case clientproto.EventType_JOIN:
 
 							var join clientproto.Join
-							err := join.Unmarshal(push.Data)
+							err := join.Unmarshal(packet.Data)
 							if err != nil {
 								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling join from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
 							}
 
-							s.node.hub.BroadcastJoin(appKey, &join)
+							s.node.hub.BroadcastJoin(appKey, &join, packet.ExcludedUid)
 
 						case clientproto.EventType_LEAVE:
 
 							var leave clientproto.Leave
-							err := leave.Unmarshal(push.Data)
+							err := leave.Unmarshal(packet.Data)
 							if err != nil {
 								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling leave from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
 							}
 
-							s.node.hub.BroadcastLeave(appKey, &leave)
+							s.node.hub.BroadcastLeave(appKey, &leave, packet.ExcludedUid)
 						}
 					}
 				}
@@ -1119,7 +1119,7 @@ func (s *shard) Unsubscribe(channels []string) error {
 	return s.sendSubRequest(sub)
 }
 
-func (s *shard) handlePublish(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.PublishRequest) error {
+func (s *shard) handlePublish(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.PublishRequest, excludedUid string) error {
 
 	pub := &clientproto.Publication{
 		Topic:   r.Topic,
@@ -1128,28 +1128,28 @@ func (s *shard) handlePublish(chId string, clientInfo *clientproto.ClientInfo, r
 		Info:    clientInfo,
 	}
 
-	return s.Publish(chId, pub)
+	return s.Publish(chId, pub, excludedUid)
 
 }
 
-func (s *shard) handleSubscribe(chId string, uid string, clientInfo *clientproto.ClientInfo, r *clientproto.SubscribeRequest) error {
+func (s *shard) handleSubscribe(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.SubscribeRequest, excludedUid string) error {
 
 	join := &clientproto.Join{
 		Channel: r.Channel,
 		Data:    clientInfo,
 	}
 
-	return s.PublishJoin(chId, join)
+	return s.PublishJoin(chId, join, excludedUid)
 }
 
-func (s *shard) handleUnsubscribe(chId string, uid string, clientInfo *clientproto.ClientInfo, r *clientproto.UnsubscribeRequest) error {
+func (s *shard) handleUnsubscribe(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.UnsubscribeRequest, excludedUid string) error {
 
 	leave := &clientproto.Leave{
 		Channel: r.Channel,
 		Data:    clientInfo,
 	}
 
-	return s.PublishLeave(chId, leave)
+	return s.PublishLeave(chId, leave, excludedUid)
 }
 
 /*
@@ -1160,7 +1160,7 @@ func (s *shard) handleUnsubscribe(chId string, uid string, clientInfo *clientpro
 |
 */
 
-func (s *shard) Publish(chId string, publication *clientproto.Publication) error {
+func (s *shard) Publish(chId string, publication *clientproto.Publication, excludedUid string) error {
 	eChan := make(chan error, 1)
 
 	bytes, err := publication.Marshal()
@@ -1168,9 +1168,10 @@ func (s *shard) Publish(chId string, publication *clientproto.Publication) error
 		return err
 	}
 
-	packet := &clientproto.Event{
-		Type: clientproto.EventType_PUBLICATION,
-		Data: bytes,
+	packet := &clientproto.Packet{
+		Type:        clientproto.EventType_PUBLICATION,
+		Data:        bytes,
+		ExcludedUid: excludedUid,
 	}
 
 	payload, err := packet.Marshal()
@@ -1201,7 +1202,7 @@ func (s *shard) Publish(chId string, publication *clientproto.Publication) error
 	return <-eChan
 }
 
-func (s *shard) PublishJoin(chId string, join *clientproto.Join) error {
+func (s *shard) PublishJoin(chId string, join *clientproto.Join, excludedUid string) error {
 	eChan := make(chan error, 1)
 
 	bytes, err := join.Marshal()
@@ -1209,9 +1210,10 @@ func (s *shard) PublishJoin(chId string, join *clientproto.Join) error {
 		return err
 	}
 
-	packet := &clientproto.Event{
-		Type: clientproto.EventType_JOIN,
-		Data: bytes,
+	packet := &clientproto.Packet{
+		Type:        clientproto.EventType_JOIN,
+		Data:        bytes,
+		ExcludedUid: excludedUid,
 	}
 
 	payload, err := packet.Marshal()
@@ -1242,7 +1244,7 @@ func (s *shard) PublishJoin(chId string, join *clientproto.Join) error {
 	return <-eChan
 }
 
-func (s *shard) PublishLeave(chId string, l *clientproto.Leave) error {
+func (s *shard) PublishLeave(chId string, l *clientproto.Leave, excludedUid string) error {
 	eChan := make(chan error, 1)
 
 	bytes, err := l.Marshal()
@@ -1250,12 +1252,13 @@ func (s *shard) PublishLeave(chId string, l *clientproto.Leave) error {
 		return err
 	}
 
-	event := &clientproto.Event{
-		Type: clientproto.EventType_LEAVE,
-		Data: bytes,
+	packet := &clientproto.Packet{
+		Type:        clientproto.EventType_LEAVE,
+		Data:        bytes,
+		ExcludedUid: excludedUid,
 	}
 
-	payload, _ := event.Marshal()
+	payload, _ := packet.Marshal()
 
 	pr := pubRequest{
 		chId: chId,

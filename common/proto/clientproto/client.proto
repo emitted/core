@@ -28,6 +28,11 @@ message Reply {
     bytes result = 3;
 }
 
+message Packet {
+    EventType type = 1;
+    bytes data = 2;
+    string excludedUid = 3;
+}
 
 enum EventType {
     PUBLICATION = 0;

@@ -246,7 +246,7 @@ func (n *Node) getApp(secret string) (*App, error) {
 }
 
 func (n *Node) Publish(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.PublishRequest) error {
-	return n.broker.Publish(chId, clientInfo, r)
+	return n.broker.Publish(chId, clientInfo, r, "")
 }
 
 func (n *Node) AddPresence(ch, uid string, clientInfo *clientproto.ClientInfo) error {

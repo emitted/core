@@ -2,6 +2,13 @@ package core
 
 import "github.com/prometheus/client_golang/prometheus"
 
+const MetricsCommandTypeConnect = "connect"
+const MetricsCommandTypePublish = "publish"
+const MetricsCommandTypeSubscribe = "subscribe"
+const MetricsCommandTypeUnsubscribe = "unsubscribe"
+const MetricsCommandTypePresence = "presence"
+const MetricsCommandTypePing = "ping"
+
 var metricsNamespace = "emitted"
 
 var (

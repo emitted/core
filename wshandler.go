@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"github.com/emitted/core/common/tickers"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -293,14 +294,14 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		var handleMu sync.RWMutex
 		var msgCount int32
 
-		ticker := time.NewTicker(time.Second)
+		ticker := tickers.SetTicker(time.Second)
 		go func() {
 			for {
 				select {
 				case <-ticker.C:
 					msgCount = 0
 				case <-s.node.NotifyShutdown():
-					ticker.Stop()
+					tickers.ReleaseTicker(ticker)
 					return
 				}
 			}
