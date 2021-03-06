@@ -199,15 +199,12 @@ func (c *Client) unsubscribeForce(ch string) {
 	uid := c.uid
 
 	if ok {
-		c.mu.Lock()
-		delete(c.channels, ch)
-		c.mu.Unlock()
 
 		chId := makeChId(c.app.ID, ch)
 
 		last, err := c.app.removeSub(ch, uid)
 		if err != nil {
-
+			c.node.logger.log(NewLogEntry(LogLevelError, "error removing sub while force unsubscribing", map[string]interface{}{"uid": c.uid, "client": c.client, "error": err.Error()}))
 		}
 		if last {
 			err := c.node.broker.RemChannel(c.app.ID, ch)
@@ -221,9 +218,6 @@ func (c *Client) unsubscribeForce(ch string) {
 		}
 
 		switch getChannelType(ch) {
-
-		case channelTypePrivate:
-		case channelTypePublic:
 		case channelTypePresence:
 
 			clientInfo := c.clientInfo(ch)
@@ -242,7 +236,15 @@ func (c *Client) unsubscribeForce(ch string) {
 			if err != nil {
 				c.node.logger.log(NewLogEntry(LogLevelError, "error publishing leave while force unsubscribing", map[string]interface{}{"uid": uid, "client": c.client, "app": c.app.ID, "channel": ch, "error": err.Error()}))
 			}
+
+			c.channels[ch].removeID(clientInfo.Id)
+
+		default:
 		}
+
+		c.mu.Lock()
+		delete(c.channels, ch)
+		c.mu.Unlock()
 	}
 }
 
@@ -617,6 +619,7 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 		return nil
 	}
+
 	timerSet := c.staleTimer != nil
 	c.mu.RUnlock()
 
@@ -817,8 +820,6 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 	if getChannelType(p.Channel) == channelTypePresence {
 
 		c.channels[p.Channel].addID(p.Data.Id)
-
-		c.node.logger.log(NewLogEntry(LogLevelDebug, "", map[string]interface{}{"data": c.channels[p.Channel].clientPresenceID}))
 
 		if c.app.Options.JoinLeave {
 
