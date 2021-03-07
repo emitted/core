@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package serviceproto;
+
+enum CommandType {
+  DISCONNECT_USER = 0;
+  FORCE_RECONNECT = 1;
+  FORCE_UPDATE_APP = 2;
+}
+
+message Command {
+  CommandType type = 1;
+  bytes data = 2;
+}
+
+message DisconnectClient {
+  string uid = 1;
+}
+
+message ForceReconnect {
+  string appId = 1;
+}
+
+message ForceUpdateApp {
+  string appId = 1;
+}

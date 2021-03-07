@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/emitted/core/common/proto/clientproto"
+	"github.com/emitted/core/common/proto/serviceproto"
 	"github.com/emitted/core/common/timers"
 	"net"
 	"strconv"
@@ -22,8 +23,9 @@ const (
 )
 
 const (
-	serviceChannelNodeInfo = "--emitted-node-info"
-	serviceChannelPing     = "--emitted-ping"
+	serviceChannelNodeInfo        = "--emitted-channel-node-info"
+	serviceChannelPing            = "--emitted-channel-ping"
+	serviceChannelServiceCommands = "--emitted-channel-service-commands"
 )
 
 var (
@@ -73,6 +75,9 @@ type shard struct {
 	subMessages  chan redis.Message
 	pubMessages  chan pubRequest
 	dataMessages chan dataRequest
+
+	eventMessages   chan redis.Message
+	commandMessages chan redis.Message
 
 	getPresenceScript    *redis.Script
 	presenceScript       *redis.Script
@@ -288,6 +293,34 @@ func newPool(n *Node, conf BrokerShardConfig) *redis.Pool {
 			return err
 		},
 	}
+}
+
+func NewShard(n *Node, conf BrokerShardConfig) (*shard, error) {
+	shard := &shard{
+		node:   n,
+		config: conf,
+		pool:   newPool(n, conf),
+
+		pubMessages:     make(chan pubRequest),
+		subCh:           make(chan subRequest),
+		subMessages:     make(chan redis.Message),
+		dataMessages:    make(chan dataRequest),
+		eventMessages:   make(chan redis.Message),
+		commandMessages: make(chan redis.Message),
+
+		presenceScript:       redis.NewScript(1, presenceSource),
+		getPresenceScript:    redis.NewScript(1, getPresenceSource),
+		addPresenceScript:    redis.NewScript(1, addPresenceSource),
+		remPresenceScript:    redis.NewScript(1, remPresenceSource),
+		updateAppStatsScript: redis.NewScript(1, updateAppStatsSource),
+		clearAppStatsScript:  redis.NewScript(1, clearAppStatsSource),
+		retrieveStatsScript:  redis.NewScript(1, retrieveStatsSource),
+		channelsScript:       redis.NewScript(1, channelsSource),
+		addChannelScript:     redis.NewScript(1, addChannelSource),
+		remChannelScript:     redis.NewScript(1, remChannelSource),
+		countChannelsScript:  redis.NewScript(1, countChannelsSource),
+	}
+	return shard, nil
 }
 
 func (s *shard) presenceHashKey(chID string) string {
@@ -546,32 +579,6 @@ func (s *shard) getDataResponse(r dataRequest) *dataResponse {
 	return r.result()
 }
 
-func NewShard(n *Node, conf BrokerShardConfig) (*shard, error) {
-	shard := &shard{
-		node:   n,
-		config: conf,
-		pool:   newPool(n, conf),
-
-		pubMessages:  make(chan pubRequest),
-		subCh:        make(chan subRequest),
-		subMessages:  make(chan redis.Message),
-		dataMessages: make(chan dataRequest),
-
-		presenceScript:       redis.NewScript(1, presenceSource),
-		getPresenceScript:    redis.NewScript(1, getPresenceSource),
-		addPresenceScript:    redis.NewScript(1, addPresenceSource),
-		remPresenceScript:    redis.NewScript(1, remPresenceSource),
-		updateAppStatsScript: redis.NewScript(1, updateAppStatsSource),
-		clearAppStatsScript:  redis.NewScript(1, clearAppStatsSource),
-		retrieveStatsScript:  redis.NewScript(1, retrieveStatsSource),
-		channelsScript:       redis.NewScript(1, channelsSource),
-		addChannelScript:     redis.NewScript(1, addChannelSource),
-		remChannelScript:     redis.NewScript(1, remChannelSource),
-		countChannelsScript:  redis.NewScript(1, countChannelsSource),
-	}
-	return shard, nil
-}
-
 func (b *Broker) getShard(channel string) *shard {
 	return b.shards[consistentIndex(channel, len(b.shards))]
 }
@@ -593,12 +600,16 @@ func (s *shard) Run() error {
 	return nil
 }
 
+/////////////////////////////////////////////////////////////////////////////////
+// This pipeline is listening for incoming events and sending them to redis shard
+
 func (s *shard) runPublishPipeline() {
 	var prs []pubRequest
 
 	pingTicker := time.NewTicker(time.Second)
 	defer pingTicker.Stop()
 
+	// TODO добавить воркеры
 	for {
 		select {
 		case <-pingTicker.C:
@@ -692,7 +703,9 @@ func (s *shard) runPubSub() {
 	}
 	defer closeDoneOnce()
 
-	// handling sub/unsub requests
+	//////////////////////////////
+	// handling subscribe requests
+
 	go func() {
 		for {
 			select {
@@ -780,102 +793,59 @@ func (s *shard) runPubSub() {
 		}
 	}()
 
-	// broadcasting new messages
+	//////////////////////////
+	// pub/sub pipeline setup
+
+	// TODO сделать переменной количество воркеров
+	for i := 0; i < 15; i++ {
+		go s.listenEvents(done)
+		go s.listenCommands(done)
+	}
+
+	// TODO сделать переменной количество воркеров
 	for i := 0; i < 15; i++ {
 		go func() {
 			for {
 				select {
+				case <-done:
+					err := psc.Close()
+					if err != nil {
+						s.node.logger.log(NewLogEntry(LogLevelError, "error closing redis connection", map[string]interface{}{"error": err.Error()}))
+					}
+					return
+
 				case message := <-s.subMessages:
+
+					/////////////////////////////////////////////
+					//redirecting messages to particular handlers
 
 					switch message.Channel {
 					case serviceChannelPing:
 					case serviceChannelNodeInfo:
+
 						s.node.handleNodeInfo(message.Data)
+
+					case serviceChannelServiceCommands:
+
+						s.commandMessages <- message
 
 					default:
 
-						var packet clientproto.Packet
-						err := packet.Unmarshal(message.Data)
-						if err != nil {
-							s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling push from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
-						}
+						s.eventMessages <- message
 
-						appKey, channelName := parseChId(message.Channel)
-
-						switch packet.Type {
-						case clientproto.EventType_PUBLICATION:
-
-							var pub clientproto.Publication
-							err := pub.Unmarshal(packet.Data)
-							if err != nil {
-								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling publication from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
-							}
-
-							s.node.hub.BroadcastPublication(appKey, channelName, &pub, packet.ExcludedUid)
-
-						case clientproto.EventType_JOIN:
-
-							var join clientproto.Join
-							err := join.Unmarshal(packet.Data)
-							if err != nil {
-								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling join from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
-							}
-
-							s.node.hub.BroadcastJoin(appKey, &join, packet.ExcludedUid)
-
-						case clientproto.EventType_LEAVE:
-
-							var leave clientproto.Leave
-							err := leave.Unmarshal(packet.Data)
-							if err != nil {
-								s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling leave from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
-							}
-
-							s.node.hub.BroadcastLeave(appKey, &leave, packet.ExcludedUid)
-						}
 					}
 				}
 			}
 		}()
 	}
 
-	go func() {
-		chIDs := make([]string, 2)
-		chIDs[0] = serviceChannelPing
-		chIDs[1] = serviceChannelNodeInfo
+	s.subscribeAlreadyExists(closeDoneOnce)
 
-		for _, ch := range s.node.hub.Channels() {
-			if s.broker.getShard(ch) == s {
-				chIDs = append(chIDs, ch)
-			}
-		}
+	/////////////////////////////////////////////
+	// listening for all new subMessages from pub/sub
 
-		batch := make([]string, 0)
-
-		for i, ch := range chIDs {
-			if len(batch) > 0 && i%512 == 0 {
-				r := newSubRequest(batch, true)
-				err := s.sendSubRequest(r)
-				if err != nil {
-					closeDoneOnce()
-					return
-				}
-				batch = nil
-			}
-			batch = append(batch, ch)
-		}
-		if len(batch) > 0 {
-			r := newSubRequest(batch, true)
-			err := s.sendSubRequest(r)
-			if err != nil {
-				closeDoneOnce()
-				return
-			}
-		}
-	}()
-
-	// listening for new subMessages from pub/sub
 	for {
+		// TODO сделать переменной
 		switch m := psc.ReceiveWithTimeout(10 * time.Second).(type) {
 
 		case redis.Subscription:
@@ -885,9 +855,173 @@ func (s *shard) runPubSub() {
 	}
 }
 
+////////////////////////////////////////////////////////
+// Subscribing to all channels that already exist in hub
+
+func (s *shard) subscribeAlreadyExists(closeDoneOnce func()) {
+
+	chIDs := make([]string, 2)
+	chIDs[0] = serviceChannelPing
+	chIDs[1] = serviceChannelNodeInfo
+
+	for _, ch := range s.node.hub.Channels() {
+		if s.broker.getShard(ch) == s {
+			chIDs = append(chIDs, ch)
+		}
+	}
+
+	batch := make([]string, 0)
+
+	for i, ch := range chIDs {
+		if len(batch) > 0 && i%512 == 0 {
+			r := newSubRequest(batch, true)
+			err := s.sendSubRequest(r)
+			if err != nil {
+				closeDoneOnce()
+				return
+			}
+			batch = nil
+		}
+		batch = append(batch, ch)
+	}
+	if len(batch) > 0 {
+		r := newSubRequest(batch, true)
+		err := s.sendSubRequest(r)
+		if err != nil {
+			closeDoneOnce()
+			return
+		}
+	}
+}
+
+////////////////////////////////////////////////////
+// This method is listening for incoming events
+// Here the messages are being broadcasted to users
+
+func (s *shard) listenEvents(done chan struct{}) {
+
+	for {
+		select {
+		case <-done:
+
+			return
+
+		case message := <-s.eventMessages:
+
+			var packet clientproto.Packet
+			err := packet.Unmarshal(message.Data)
+			if err != nil {
+				s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling push from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
+			}
+
+			appKey, channelName := parseChId(message.Channel)
+
+			switch packet.Type {
+			case clientproto.EventType_PUBLICATION:
+
+				var pub clientproto.Publication
+				err := pub.Unmarshal(packet.Data)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling publication from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
+				}
+
+				s.node.hub.BroadcastPublication(appKey, channelName, &pub, packet.ExcludedUid)
+
+			case clientproto.EventType_JOIN:
+
+				var join clientproto.Join
+				err := join.Unmarshal(packet.Data)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling join from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
+				}
+
+				s.node.hub.BroadcastJoin(appKey, &join, packet.ExcludedUid)
+
+			case clientproto.EventType_LEAVE:
+
+				var leave clientproto.Leave
+				err := leave.Unmarshal(packet.Data)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling leave from redis", map[string]interface{}{"redis_channel": message.Channel, "error": err.Error()}))
+				}
+
+				s.node.hub.BroadcastLeave(appKey, &leave, packet.ExcludedUid)
+			}
+		}
+	}
+
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Here we are listening for new messages from backend services
+//
+// This type of messages are used for remote control of internal behaviour, like:
+// - Disconnecting particular users
+// - Force reconnecting users
+// - Force updating application information from database
+
+func (s *shard) listenCommands(done chan struct{}) {
+
+	for {
+		select {
+		case <-done:
+
+			return
+
+		case message := <-s.commandMessages:
+
+			var command serviceproto.Command
+			err := command.Unmarshal(message.Data)
+			if err != nil {
+				s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling service commands", map[string]interface{}{"error": err.Error()}))
+			}
+
+			switch command.Type {
+			case serviceproto.CommandType_DISCONNECT_USER:
+
+				var p serviceproto.DisconnectClient
+				err := p.Unmarshal(command.Data)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling service command", map[string]interface{}{"command": "force reconnect", "error": err.Error()}))
+				}
+
+			case serviceproto.CommandType_FORCE_RECONNECT:
+
+				var p serviceproto.ForceReconnect
+				err := p.Unmarshal(command.Data)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling service command", map[string]interface{}{"command": "force reconnect", "error": err.Error()}))
+				}
+
+			case serviceproto.CommandType_FORCE_UPDATE_APP:
+
+				var p serviceproto.ForceReconnect
+				err := p.Unmarshal(command.Data)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling service command", map[string]interface{}{"command": "force update app", "error": err.Error()}))
+				}
+
+			}
+
+		}
+	}
+
+}
+
+//////////////////////////////////////////////////////////////
+// Data pipeline is dedicated to send internal requests, like:
+// - adding, removing, fetching presence
+// - updating, retrieving application stats
+// - synchronizing channels between nodes
+//
+// and etc.
+
 func (s *shard) RunDataPipeline() {
 
 	conn := s.pool.Get()
+
+	//////////////////////////////////////////////////////////
+	// Loading redis scripts, they're basically written in Lua
 
 	err := s.addPresenceScript.Load(conn)
 	if err != nil {
@@ -1003,6 +1137,9 @@ func (s *shard) RunDataPipeline() {
 	if err != nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error closing redis connection", map[string]interface{}{"error": err.Error()}))
 	}
+
+	////////////////////////////
+	// sending incoming commands
 
 	var drs []dataRequest
 
