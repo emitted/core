@@ -236,3 +236,50 @@ func (app *App) makeChannel(name string) (*Channel, error) {
 
 	return ch, nil
 }
+
+func (app *App) updateInformation() error {
+
+	fetched, err := app.node.GetAppByID(app.ID)
+	if err != nil {
+		return err
+	}
+
+	app.mu.Lock()
+
+	app.Credentials = fetched.Credentials
+	app.MaxConnections = fetched.MaxConnections
+	app.MaxMessages = fetched.MaxMessages
+	app.Active = fetched.Active
+	app.Options = fetched.Options
+
+	app.mu.Unlock()
+
+	return nil
+}
+
+func (app *App) ForceReconnectClients() error {
+
+	clients := make([]*Client, len(app.clients))
+	app.mu.RLock()
+	for _, client := range app.clients {
+		clients = append(clients, client)
+	}
+	app.mu.RUnlock()
+
+	wg := &sync.WaitGroup{}
+	for _, c := range clients {
+		wg.Add(1)
+		go func(c *Client) {
+			err := c.Close(DisconnectForceReconnect)
+			if err != nil {
+				app.node.logger.log(NewLogEntry(LogLevelError, "error closing client", map[string]interface{}{"uid": c.uid, "client": c.client}))
+			}
+
+			wg.Done()
+		}(c)
+	}
+
+	wg.Wait()
+
+	return nil
+}

@@ -287,7 +287,7 @@ func (s *WebsocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			close(closeCh)
 			err := client.Close(nil)
 			if err != nil {
-				client.node.logger.log(newLogEntry(LogLevelError, "error closing client"))
+				client.node.logger.log(NewLogEntry(LogLevelError, "error closing client"))
 			}
 		}()
 

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"github.com/FZambia/eagle"
 	"github.com/emitted/core/common/proto/clientproto"
 	"github.com/emitted/core/common/proto/nodeproto"
@@ -194,7 +195,7 @@ func (n *Node) sendNodePing() {
 		case <-ticker.C:
 			err := n.pubNode()
 			if err != nil {
-				n.logger.log(newLogEntry(LogLevelError, "error publishing node control command", map[string]interface{}{"error": err.Error()}))
+				n.logger.log(NewLogEntry(LogLevelError, "error publishing node control command", map[string]interface{}{"error": err.Error()}))
 			}
 		}
 	}
@@ -243,6 +244,56 @@ func (n *Node) getApp(secret string) (*App, error) {
 	}
 
 	return okApp, nil
+}
+
+func (n *Node) GetAppByID(id string) (*App, error) {
+	app, err := n.mongo.GetAppByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	return app, nil
+}
+
+func (n *Node) UpdateAppInformation(appId string) error {
+
+	var err error
+
+	app, ok := n.hub.apps[appId]
+	if !ok {
+		return errors.New("app is not found")
+	}
+
+	err = app.updateInformation()
+
+	return err
+}
+
+func (n *Node) DisconnectClient(uid string) error {
+
+	var err error
+
+	c, ok := n.hub.conns[uid]
+	if !ok {
+		return errors.New("client is not found")
+	}
+
+	err = c.Close(DisconnectForceNoReconnect)
+
+	return err
+}
+
+func (n *Node) ForceReconnectClients(appId string) error {
+	var err error
+
+	app, ok := n.hub.apps[appId]
+	if !ok {
+		return errors.New("app is not found")
+	}
+
+	err = app.ForceReconnectClients()
+
+	return err
 }
 
 func (n *Node) Publish(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.PublishRequest) error {

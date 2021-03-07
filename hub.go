@@ -95,7 +95,7 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join, excludedUid s
 
 	data, err := join.Marshal()
 	if err != nil {
-		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling join", map[string]interface{}{"error": err.Error()}))
+		h.node.logger.log(NewLogEntry(LogLevelError, "error marshaling join", map[string]interface{}{"error": err.Error()}))
 	}
 
 	push := &clientproto.Event{
@@ -105,7 +105,7 @@ func (h *Hub) BroadcastJoin(appKey string, join *clientproto.Join, excludedUid s
 
 	payload, err := push.Marshal()
 	if err != nil {
-		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling push", map[string]interface{}{"error": err.Error()}))
+		h.node.logger.log(NewLogEntry(LogLevelError, "error marshaling push", map[string]interface{}{"error": err.Error()}))
 	}
 
 	_, ok = h.apps[appKey].channels[join.Channel]
@@ -137,7 +137,7 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave, excludedUi
 
 	data, err := leave.Marshal()
 	if err != nil {
-		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling leave", map[string]interface{}{"error": err.Error()}))
+		h.node.logger.log(NewLogEntry(LogLevelError, "error marshaling leave", map[string]interface{}{"error": err.Error()}))
 	}
 
 	push := &clientproto.Event{
@@ -147,7 +147,7 @@ func (h *Hub) BroadcastLeave(appKey string, leave *clientproto.Leave, excludedUi
 
 	payload, err := push.Marshal()
 	if err != nil {
-		h.node.logger.log(newLogEntry(LogLevelError, "error marshaling leave", map[string]interface{}{"error": err.Error()}))
+		h.node.logger.log(NewLogEntry(LogLevelError, "error marshaling leave", map[string]interface{}{"error": err.Error()}))
 	}
 
 	_, ok = h.apps[appKey].channels[leave.Channel]

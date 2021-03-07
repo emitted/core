@@ -17,8 +17,8 @@ type LogEntry struct {
 	Fields  map[string]interface{}
 }
 
-// newLogEntry helps to create Entry.
-func newLogEntry(level LogLevel, message string, fields ...map[string]interface{}) LogEntry {
+// NewLogEntry creates new LogEntry.
+func NewLogEntry(level LogLevel, message string, fields ...map[string]interface{}) LogEntry {
 	var f map[string]interface{}
 	if len(fields) > 0 {
 		f = fields[0]
@@ -28,11 +28,6 @@ func newLogEntry(level LogLevel, message string, fields ...map[string]interface{
 		Message: message,
 		Fields:  f,
 	}
-}
-
-// NewLogEntry creates new LogEntry.
-func NewLogEntry(level LogLevel, message string, fields ...map[string]interface{}) LogEntry {
-	return newLogEntry(level, message, fields...)
 }
 
 // LogHandler handles log entries - i.e. writes into correct destination if necessary.

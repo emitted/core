@@ -112,3 +112,18 @@ func (m *Mongo) GetAppByKey(key string) (*App, error) {
 
 	return &app, nil
 }
+
+func (m *Mongo) GetAppByID(id string) (*App, error) {
+	var app App
+
+	query := func(c *mgo.Collection) error {
+		return c.Find(bson.M{"_id": id}).One(&app)
+	}
+
+	err := m.executeQuery(query)
+	if err != nil {
+		return nil, err
+	}
+
+	return &app, nil
+}

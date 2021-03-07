@@ -586,14 +586,20 @@ func (b *Broker) getShard(channel string) *shard {
 func (s *shard) Run() error {
 
 	go runForever(func() {
+		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting publish pipeline"))
+
 		s.runPublishPipeline()
 	})
 
 	go runForever(func() {
+		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting data pipeline"))
+
 		s.RunDataPipeline()
 	})
 
 	go runForever(func() {
+		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting data pipeline"))
+
 		s.runPubSub()
 	})
 
@@ -985,12 +991,30 @@ func (s *shard) listenCommands(done chan struct{}) {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling service command", map[string]interface{}{"command": "force reconnect", "error": err.Error()}))
 				}
 
+				if p.Uid == "" {
+					s.node.logger.log(NewLogEntry(LogLevelError, "empty client id provided in disconnect client command"))
+				}
+
+				err = s.node.DisconnectClient(p.Uid)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error disconnecting client", map[string]interface{}{"uid": p.Uid, "error": err.Error()}))
+				}
+
 			case serviceproto.CommandType_FORCE_RECONNECT:
 
 				var p serviceproto.ForceReconnect
 				err := p.Unmarshal(command.Data)
 				if err != nil {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling service command", map[string]interface{}{"command": "force reconnect", "error": err.Error()}))
+				}
+
+				if p.AppId == "" {
+					s.node.logger.log(NewLogEntry(LogLevelError, "empty app id provided in force reconnect command"))
+				}
+
+				err = s.node.ForceReconnectClients(p.AppId)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error force reconnecting clients", map[string]interface{}{"app": p.AppId, "error": err.Error()}))
 				}
 
 			case serviceproto.CommandType_FORCE_UPDATE_APP:
@@ -1001,6 +1025,18 @@ func (s *shard) listenCommands(done chan struct{}) {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error unmarshaling service command", map[string]interface{}{"command": "force update app", "error": err.Error()}))
 				}
 
+				if p.AppId == "" {
+					s.node.logger.log(NewLogEntry(LogLevelError, "empty app id provided in force update app command"))
+				}
+
+				err = s.node.UpdateAppInformation(p.AppId)
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error updating app information", map[string]interface{}{"error": err.Error()}))
+				}
+
+			default:
+
+				s.node.logger.log(NewLogEntry(LogLevelError, "unknown service command", map[string]interface{}{"command": command.Type}))
 			}
 
 		}
