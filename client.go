@@ -821,18 +821,16 @@ func (c *Client) handleSubscribe(data []byte, rw *replyWriter) *Disconnect {
 
 		c.channels[p.Channel].addID(p.Data.Id)
 
-		if c.app.Options.JoinLeave {
-
-			excludedUid := ""
-			if c.app.Options.ExcludeSender == true {
-				excludedUid = c.uid
-			}
-
-			err = c.node.broker.HandleSubscribe(chId, &clientInfo, p, excludedUid)
-			if err != nil {
-				c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling subscribe", map[string]interface{}{"uid": c.uid, "client": c.client, "app": c.app.ID, "channel": p.Channel, "error": err.Error()}))
-			}
+		excludedUid := ""
+		if c.app.Options.ExcludeSender == true {
+			excludedUid = c.uid
 		}
+
+		err = c.node.broker.HandleSubscribe(chId, &clientInfo, p, excludedUid)
+		if err != nil {
+			c.node.logger.log(NewLogEntry(LogLevelError, "error broker handling subscribe", map[string]interface{}{"uid": c.uid, "client": c.client, "app": c.app.ID, "channel": p.Channel, "error": err.Error()}))
+		}
+
 	}
 
 	if timerSet {
@@ -938,7 +936,7 @@ func (c *Client) handleUnsubscribe(data []byte, rw *replyWriter) *Disconnect {
 	}
 
 	if !last {
-		if getChannelType(p.Channel) == channelTypePresence && c.app.Options.JoinLeave {
+		if getChannelType(p.Channel) == channelTypePresence {
 
 			excludedUid := ""
 			if c.app.Options.ExcludeSender == true {

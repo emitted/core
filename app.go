@@ -25,7 +25,6 @@ type AppWebhook struct {
 
 type AppOptions struct {
 	ClientPublications bool `bson:"client_publications"`
-	JoinLeave          bool `bson:"join_leave"`
 	ExcludeSender      bool `bson:"exclude_sender"`
 	//Webhooks           []AppWebhook `bson:"webhooks"`
 }
