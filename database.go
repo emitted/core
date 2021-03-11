@@ -6,6 +6,14 @@ import (
 	"time"
 )
 
+type DatabaseInterface interface {
+	GetAppByID(appId string) (*App, error)
+	GetAppByKey(key string) (*App, error)
+	GetAppBySecret(secret string) (*App, error)
+
+	Run() error
+}
+
 type MongoConfig struct {
 	Address string
 

@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// Node ...
 type Node struct {
 	mu        sync.RWMutex
 	uid       string
@@ -21,8 +20,8 @@ type Node struct {
 
 	hub *Hub
 
-	mongo  *Mongo
-	broker *Broker
+	db     DatabaseInterface
+	broker BrokerInterface
 	//webhooks *webhookManager
 
 	config Config
@@ -92,7 +91,7 @@ func NewNode(c Config, brokerConfig *BrokerConfig, mongoConfig MongoConfig) *Nod
 
 	n.hub = NewHub(n)
 
-	n.mongo = NewMongo(n, mongoConfig)
+	n.db = NewMongo(n, mongoConfig)
 
 	//n.webhooks = NewWebhookManager(n, kafkaConfig)
 
@@ -111,7 +110,7 @@ func (n *Node) Run() error {
 		return err
 	}
 
-	err = n.mongo.Run()
+	err = n.db.Run()
 	if err != nil {
 		return err
 	}
@@ -217,7 +216,7 @@ func (n *Node) cleanNodeInfo() {
 
 func (n *Node) getApp(secret string) (*App, error) {
 
-	app, err := n.mongo.GetAppBySecret(secret)
+	app, err := n.db.GetAppBySecret(secret)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +246,7 @@ func (n *Node) getApp(secret string) (*App, error) {
 }
 
 func (n *Node) GetAppByID(id string) (*App, error) {
-	app, err := n.mongo.GetAppByID(id)
+	app, err := n.db.GetAppByID(id)
 	if err != nil {
 		return nil, err
 	}

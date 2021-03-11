@@ -28,6 +28,10 @@ const (
 	serviceChannelServiceCommands = "--emitted-channel-service-commands"
 )
 
+//////////////////////////////////
+// Redis commands, written in Lua
+// we use them for convenience
+
 var (
 	addPresenceSource = `redis.call("hset", KEYS[1], ARGV[1], ARGV[2])`
 
@@ -55,6 +59,43 @@ redis.call("hincrby", KEYS[1], ARGV[3], ARGV[4])
 	remChannelSource = `return redis.call("srem", KEYS[1], ARGV[1])`
 )
 
+////////////////////////////////////////
+// In case in future there will be used
+// some different message broker
+
+// Primarily we don't need broker interface, but I think it would be
+// right if I just make everything how it needs to be done
+
+type BrokerInterface interface {
+	Run() error
+
+	Subscribe(chID string) error
+	Unsubscribe(chID string) error
+
+	Publish(chId string, clientInfo *clientproto.ClientInfo, p *clientproto.PublishRequest, excludedUid string) error
+	PublishJoin(chId string, join *clientproto.Join) error
+	PublishLeave(chId string, join *clientproto.Leave) error
+
+	HandleSubscribe(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.SubscribeRequest, excludedUid string) error
+	HandleUnsubscribe(chId string, clientInfo *clientproto.ClientInfo, r *clientproto.UnsubscribeRequest, excludedUid string) error
+
+	AddPresence(ch string, uid string, clientInfo *clientproto.ClientInfo) error
+	RemovePresence(ch string, uid string) error
+	Presence(ch string) (map[string]*clientproto.ClientInfo, error)
+	GetPresence(ch string, uid string) (*clientproto.ClientInfo, error)
+
+	UpdateAppStats(pp string, conns, msgs int) error
+	RetrieveStats(appID string) (int, int, error)
+	ClearAppStats(appID string) error
+
+	AddChannel(app, channel string) error
+	RemChannel(app, channel string) error
+	Channels(app string) ([]string, error)
+	CountChannels(app string) (int, error)
+
+	PublishNode(data []byte) error
+}
+
 type Broker struct {
 	node   *Node
 	shards []*shard
@@ -64,6 +105,12 @@ type Broker struct {
 type BrokerConfig struct {
 	Shards []BrokerShardConfig
 }
+
+///////////////////////////////////////////////////
+// Shard struct definition
+//
+// shard is a representation of a real broker shard.
+// commands from the above are redirected to shards by consistent index fn
 
 type shard struct {
 	node   *Node
@@ -142,8 +189,16 @@ func (b *Broker) Run() error {
 	return nil
 }
 
-//////////////////////
-////// REDIRECTS /////
+//////////////////////////////////////////////////
+// Main functionalities of the broker, like:
+//
+// - sending commands to add, remove subscription
+// - emitting publications, publishing joins, leaves
+// - adding, removing, getting presence
+// - fetching active channels
+// - publishing node information for synchronizing
+//
+// These are basically redirects on shard methods
 
 func (b *Broker) PublishNode(data []byte) error {
 	var err error
@@ -472,6 +527,10 @@ func (s *shard) countChannels(app string) (int, error) {
 	return num, nil
 }
 
+//////////////////////////////////////////////////////////////
+// This 3 methods below are used to transform the information
+// received from broker to usable format
+
 func (s *shard) mapStringClientInfoUid(reply interface{}, err error) (map[string]*clientproto.ClientInfo, error) {
 	values, err := redis.Values(reply, err)
 
@@ -583,6 +642,9 @@ func (b *Broker) getShard(channel string) *shard {
 	return b.shards[consistentIndex(channel, len(b.shards))]
 }
 
+/////////////////////////////////////////////////////////////
+// runs all the broker pipelines, publishers, receivers etc.
+
 func (s *shard) Run() error {
 
 	go runForever(func() {
@@ -606,8 +668,9 @@ func (s *shard) Run() error {
 	return nil
 }
 
-/////////////////////////////////////////////////////////////////////////////////
-// This pipeline is listening for incoming events and sending them to redis shard
+//////////////////////////////////////////////////
+// This pipeline is listening for incoming events
+// and sending them to redis shard
 
 func (s *shard) runPublishPipeline() {
 	var prs []pubRequest

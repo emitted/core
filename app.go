@@ -138,6 +138,8 @@ func (app *App) runStatsUpdate() {
 			}
 		case <-app.NotifyShutdown():
 			tickers.ReleaseTicker(ticker)
+
+			return
 		}
 	}
 
