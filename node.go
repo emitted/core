@@ -86,7 +86,6 @@ func NewNode(c Config, brokerConfig *BrokerConfig, mongoConfig MongoConfig) *Nod
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	n.broker = broker
 
 	n.hub = NewHub(n)
@@ -243,6 +242,11 @@ func (n *Node) getApp(secret string) (*App, error) {
 	}
 
 	return okApp, nil
+}
+
+func (n *Node) AddBrokerShard(shard *shard) error {
+
+	return nil
 }
 
 func (n *Node) GetAppByID(id string) (*App, error) {

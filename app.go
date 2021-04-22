@@ -268,6 +268,7 @@ func (app *App) ForceReconnectClients() error {
 	app.mu.RUnlock()
 
 	wg := &sync.WaitGroup{}
+
 	for _, c := range clients {
 		wg.Add(1)
 		go func(c *Client) {

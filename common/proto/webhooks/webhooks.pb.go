@@ -7,7 +7,7 @@ import (
 	bytes "bytes"
 	fmt "fmt"
 	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
+	proto "github.com/golang/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -22,7 +22,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
+const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
 type Event int32
 
@@ -59,8 +59,11 @@ func (Event) EnumDescriptor() ([]byte, []int) {
 }
 
 type ClientInfo struct {
-	Id   string `protobuf:"bytes,1,opt,name=id,proto3" json:"id"`
-	Data Raw    `protobuf:"bytes,2,opt,name=data,proto3,customtype=Raw" json:"data,omitempty"`
+	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id"`
+	Data                 Raw      `protobuf:"bytes,2,opt,name=data,proto3,customtype=Raw" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ClientInfo) Reset()         { *m = ClientInfo{} }
@@ -104,7 +107,10 @@ func (m *ClientInfo) GetId() string {
 }
 
 type ChannelOccupied struct {
-	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	Channel              string   `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ChannelOccupied) Reset()         { *m = ChannelOccupied{} }
@@ -148,7 +154,10 @@ func (m *ChannelOccupied) GetChannel() string {
 }
 
 type ChannelVacated struct {
-	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	Channel              string   `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *ChannelVacated) Reset()         { *m = ChannelVacated{} }
@@ -192,9 +201,12 @@ func (m *ChannelVacated) GetChannel() string {
 }
 
 type PresenceAdded struct {
-	Channel string      `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
-	Uid     string      `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid"`
-	Info    *ClientInfo `protobuf:"bytes,3,opt,name=info,proto3" json:"info"`
+	Channel              string      `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	Uid                  string      `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid"`
+	Info                 *ClientInfo `protobuf:"bytes,3,opt,name=info,proto3" json:"info"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
 func (m *PresenceAdded) Reset()         { *m = PresenceAdded{} }
@@ -252,9 +264,12 @@ func (m *PresenceAdded) GetInfo() *ClientInfo {
 }
 
 type PresenceRemoved struct {
-	Channel string      `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
-	Uid     string      `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid"`
-	Info    *ClientInfo `protobuf:"bytes,3,opt,name=info,proto3" json:"info"`
+	Channel              string      `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	Uid                  string      `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid"`
+	Info                 *ClientInfo `protobuf:"bytes,3,opt,name=info,proto3" json:"info"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
 func (m *PresenceRemoved) Reset()         { *m = PresenceRemoved{} }
@@ -312,10 +327,13 @@ func (m *PresenceRemoved) GetInfo() *ClientInfo {
 }
 
 type Publication struct {
-	Channel string      `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
-	Uid     string      `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid"`
-	Data    Raw         `protobuf:"bytes,3,opt,name=data,proto3,customtype=Raw" json:"data,omitempty"`
-	Info    *ClientInfo `protobuf:"bytes,4,opt,name=info,proto3" json:"info"`
+	Channel              string      `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel"`
+	Uid                  string      `protobuf:"bytes,2,opt,name=uid,proto3" json:"uid"`
+	Data                 Raw         `protobuf:"bytes,3,opt,name=data,proto3,customtype=Raw" json:"data,omitempty"`
+	Info                 *ClientInfo `protobuf:"bytes,4,opt,name=info,proto3" json:"info"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
 func (m *Publication) Reset()         { *m = Publication{} }
@@ -373,8 +391,11 @@ func (m *Publication) GetInfo() *ClientInfo {
 }
 
 type Hook struct {
-	Event Event `protobuf:"varint,1,opt,name=event,proto3,enum=webhooks.Event" json:"event,omitempty"`
-	Data  Raw   `protobuf:"bytes,2,opt,name=data,proto3,customtype=Raw" json:"data,omitempty"`
+	Event                Event    `protobuf:"varint,1,opt,name=event,proto3,enum=webhooks.Event" json:"event,omitempty"`
+	Data                 Raw      `protobuf:"bytes,2,opt,name=data,proto3,customtype=Raw" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Hook) Reset()         { *m = Hook{} }
@@ -418,13 +439,16 @@ func (m *Hook) GetEvent() Event {
 }
 
 type Webhook struct {
-	Id        uint32 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Timestamp int64  `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Signature string `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
-	Event     Event  `protobuf:"varint,4,opt,name=event,proto3,enum=webhooks.Event" json:"event,omitempty"`
-	AppId     string `protobuf:"bytes,5,opt,name=appId,proto3" json:"appId,omitempty"`
-	Url       string `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
-	Data      []byte `protobuf:"bytes,7,opt,name=data,proto3" json:"data,omitempty"`
+	Id                   uint32   `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Timestamp            int64    `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Signature            string   `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
+	Event                Event    `protobuf:"varint,4,opt,name=event,proto3,enum=webhooks.Event" json:"event,omitempty"`
+	AppId                string   `protobuf:"bytes,5,opt,name=appId,proto3" json:"appId,omitempty"`
+	Url                  string   `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
+	Data                 []byte   `protobuf:"bytes,7,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Webhook) Reset()         { *m = Webhook{} }
@@ -524,43 +548,42 @@ func init() {
 func init() { proto.RegisterFile("webhooks.proto", fileDescriptor_1f2e9c14ce269d50) }
 
 var fileDescriptor_1f2e9c14ce269d50 = []byte{
-	// 562 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x54, 0xcf, 0x6e, 0xd3, 0x4e,
-	0x10, 0xce, 0xc6, 0x4e, 0xd3, 0x6c, 0x7e, 0x75, 0xac, 0xfd, 0x55, 0x28, 0x20, 0xb0, 0xab, 0x88,
-	0x4a, 0x15, 0x82, 0x56, 0x84, 0x03, 0x5c, 0xfd, 0x4f, 0x6a, 0xa4, 0x92, 0x44, 0x4b, 0x9b, 0x1e,
-	0x8b, 0x63, 0x6f, 0x92, 0x55, 0x63, 0xaf, 0x95, 0xac, 0x5b, 0xf1, 0x00, 0x88, 0x2b, 0x8f, 0xc1,
-	0x13, 0xa0, 0x3e, 0x42, 0x8f, 0x3d, 0x22, 0x0e, 0x16, 0x24, 0xb7, 0x3c, 0x01, 0x47, 0xe4, 0x75,
-	0x9c, 0xdc, 0x50, 0x40, 0x48, 0x5c, 0x56, 0x33, 0xdf, 0xcc, 0x37, 0xfe, 0x66, 0xf4, 0xc9, 0x50,
-	0xb9, 0x26, 0xfd, 0x11, 0x63, 0x97, 0xd3, 0xc3, 0x68, 0xc2, 0x38, 0x43, 0xdb, 0x79, 0xfe, 0xe0,
-	0xd9, 0x90, 0xf2, 0x51, 0xdc, 0x3f, 0xf4, 0x58, 0x70, 0x34, 0x64, 0x43, 0x76, 0x24, 0x1a, 0xfa,
-	0xf1, 0x40, 0x64, 0x22, 0x11, 0x51, 0x46, 0x6c, 0x9c, 0x43, 0x68, 0x8d, 0x29, 0x09, 0x79, 0x2b,
-	0x1c, 0x30, 0x74, 0x0f, 0x16, 0xa9, 0x5f, 0x07, 0x7b, 0xe0, 0xa0, 0x62, 0x6e, 0x2d, 0x12, 0xbd,
-	0x48, 0x7d, 0x5c, 0xa4, 0x3e, 0x7a, 0x0e, 0x65, 0xdf, 0xe5, 0x6e, 0xbd, 0xb8, 0x07, 0x0e, 0xfe,
-	0x33, 0x1f, 0xdd, 0x26, 0x7a, 0xe1, 0x6b, 0xa2, 0x4b, 0xd8, 0xbd, 0x5e, 0x24, 0xba, 0x92, 0x96,
-	0x9e, 0xb2, 0x80, 0x72, 0x12, 0x44, 0xfc, 0x1d, 0x16, 0xad, 0x8d, 0x57, 0xb0, 0x66, 0x8d, 0xdc,
-	0x30, 0x24, 0xe3, 0x8e, 0xe7, 0xc5, 0x11, 0x25, 0x3e, 0xda, 0x87, 0x65, 0x2f, 0x83, 0x96, 0x9f,
-	0xa8, 0x2e, 0x12, 0x3d, 0x87, 0x70, 0x1e, 0x34, 0x5e, 0x42, 0x65, 0xc9, 0xec, 0xb9, 0x9e, 0xcb,
-	0x37, 0x27, 0xbe, 0x07, 0x70, 0xa7, 0x3b, 0x21, 0x53, 0x12, 0x7a, 0xc4, 0xf0, 0xfd, 0x8d, 0x89,
-	0xe8, 0x3e, 0x94, 0x62, 0xea, 0x8b, 0xed, 0x2a, 0x66, 0x79, 0x91, 0xe8, 0x69, 0x8a, 0xd3, 0x07,
-	0x35, 0xa1, 0x4c, 0xc3, 0x01, 0xab, 0x4b, 0x7b, 0xe0, 0xa0, 0xda, 0xdc, 0x3d, 0x5c, 0xdd, 0x7d,
-	0x7d, 0x35, 0x73, 0x7b, 0x91, 0xe8, 0xa2, 0x0b, 0x8b, 0xb7, 0xf1, 0x01, 0xc0, 0x5a, 0xae, 0x03,
-	0x93, 0x80, 0x5d, 0xfd, 0x33, 0x25, 0x9f, 0x01, 0xac, 0x76, 0xe3, 0xfe, 0x98, 0x7a, 0x2e, 0xa7,
-	0x2c, 0xfc, 0x0b, 0x2a, 0x72, 0x27, 0x48, 0x1b, 0x3b, 0x61, 0x25, 0x5c, 0xfe, 0x0d, 0xe1, 0x6f,
-	0xa1, 0x7c, 0xcc, 0xd8, 0x25, 0xda, 0x87, 0x25, 0x72, 0x45, 0x42, 0x2e, 0xe4, 0x2a, 0xcd, 0xda,
-	0x9a, 0xec, 0xa4, 0x30, 0xce, 0xaa, 0x7f, 0xe2, 0xcf, 0x1b, 0x00, 0xcb, 0xe7, 0xd9, 0x30, 0xa4,
-	0xac, 0x6c, 0xbf, 0x23, 0xec, 0xfe, 0x10, 0x56, 0x38, 0x0d, 0xc8, 0x94, 0xbb, 0x41, 0x24, 0x66,
-	0x4a, 0x78, 0x0d, 0xa4, 0xd5, 0x29, 0x1d, 0x86, 0x2e, 0x8f, 0x27, 0x44, 0xdc, 0xa1, 0x82, 0xd7,
-	0xc0, 0x5a, 0xb1, 0xfc, 0x4b, 0xc5, 0xbb, 0xb0, 0xe4, 0x46, 0x51, 0xcb, 0xaf, 0x97, 0xc4, 0x80,
-	0x2c, 0x41, 0x2a, 0x94, 0xe2, 0xc9, 0xb8, 0xbe, 0x25, 0xb0, 0x34, 0x44, 0x68, 0xb9, 0x59, 0x39,
-	0xdd, 0x2c, 0x93, 0xfe, 0x24, 0x80, 0x25, 0x67, 0x39, 0x44, 0xb5, 0x8e, 0x8d, 0x76, 0xdb, 0x39,
-	0xb9, 0xe8, 0x58, 0xd6, 0x59, 0xb7, 0xe5, 0xd8, 0x6a, 0x01, 0xfd, 0x0f, 0x6b, 0x39, 0xda, 0x33,
-	0x2c, 0xe3, 0xd4, 0xb1, 0x55, 0x80, 0x10, 0x54, 0xba, 0xd8, 0x79, 0xe3, 0xb4, 0x2d, 0xe7, 0xc2,
-	0xb0, 0x6d, 0xc7, 0x56, 0x8b, 0x29, 0x7d, 0x85, 0x61, 0xe7, 0x75, 0xa7, 0xe7, 0xd8, 0xaa, 0x84,
-	0x6a, 0xb0, 0xda, 0x3d, 0x33, 0x4f, 0x5a, 0x96, 0x71, 0xda, 0xea, 0xb4, 0x55, 0xd9, 0x7c, 0xfc,
-	0xe3, 0xbb, 0x06, 0x3e, 0xcd, 0x34, 0x70, 0x33, 0xd3, 0xc0, 0xed, 0x4c, 0x03, 0x77, 0x33, 0x0d,
-	0x7c, 0x9b, 0x69, 0xe0, 0xe3, 0x5c, 0x2b, 0xdc, 0xcd, 0xb5, 0xc2, 0x97, 0xb9, 0x56, 0xe8, 0x6f,
-	0x89, 0xff, 0xc9, 0x8b, 0x9f, 0x01, 0x00, 0x00, 0xff, 0xff, 0x94, 0x66, 0x4b, 0x85, 0x9a, 0x04,
-	0x00, 0x00,
+	// 552 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x54, 0xcd, 0x6e, 0xd3, 0x40,
+	0x10, 0xee, 0xc6, 0x4e, 0xd3, 0x6c, 0xa8, 0x63, 0x2d, 0x15, 0x0a, 0xa8, 0xd8, 0x51, 0xa4, 0x4a,
+	0x11, 0x82, 0x54, 0x84, 0x03, 0x5c, 0xfd, 0x27, 0x35, 0x52, 0x49, 0xa2, 0xa5, 0x4d, 0x8f, 0xc5,
+	0xb1, 0x37, 0xc9, 0xaa, 0xb1, 0xd7, 0x4a, 0xd6, 0xad, 0x78, 0x00, 0xc4, 0x2b, 0xf0, 0x08, 0x3c,
+	0x01, 0xea, 0x23, 0xf4, 0xc8, 0x99, 0x83, 0x05, 0xe1, 0x96, 0x27, 0xe0, 0x88, 0xbc, 0x8e, 0x93,
+	0x1b, 0x0a, 0x08, 0x89, 0xcb, 0x6a, 0xe6, 0x9b, 0xf9, 0xc6, 0xdf, 0x8c, 0x3e, 0x19, 0x2a, 0x37,
+	0x64, 0x38, 0x61, 0xec, 0x6a, 0xde, 0x8a, 0x66, 0x8c, 0x33, 0xb4, 0x97, 0xe7, 0x8f, 0x9e, 0x8d,
+	0x29, 0x9f, 0xc4, 0xc3, 0x96, 0xc7, 0x82, 0xe3, 0x31, 0x1b, 0xb3, 0x63, 0xd1, 0x30, 0x8c, 0x47,
+	0x22, 0x13, 0x89, 0x88, 0x32, 0x62, 0xe3, 0x02, 0x42, 0x6b, 0x4a, 0x49, 0xc8, 0x3b, 0xe1, 0x88,
+	0xa1, 0x07, 0xb0, 0x40, 0xfd, 0x1a, 0xa8, 0x83, 0x66, 0xd9, 0xdc, 0x5d, 0x26, 0x7a, 0x81, 0xfa,
+	0xb8, 0x40, 0x7d, 0xf4, 0x1c, 0xca, 0xbe, 0xcb, 0xdd, 0x5a, 0xa1, 0x0e, 0x9a, 0xf7, 0xcc, 0xc7,
+	0x77, 0x89, 0xbe, 0xf3, 0x35, 0xd1, 0x25, 0xec, 0xde, 0x2c, 0x13, 0x5d, 0x49, 0x4b, 0x4f, 0x59,
+	0x40, 0x39, 0x09, 0x22, 0xfe, 0x0e, 0x8b, 0xd6, 0xc6, 0x2b, 0x58, 0xb5, 0x26, 0x6e, 0x18, 0x92,
+	0x69, 0xcf, 0xf3, 0xe2, 0x88, 0x12, 0x1f, 0x1d, 0xc1, 0x92, 0x97, 0x41, 0xab, 0x4f, 0x54, 0x96,
+	0x89, 0x9e, 0x43, 0x38, 0x0f, 0x1a, 0x2f, 0xa1, 0xb2, 0x62, 0x0e, 0x5c, 0xcf, 0xe5, 0xdb, 0x13,
+	0xdf, 0x03, 0xb8, 0xdf, 0x9f, 0x91, 0x39, 0x09, 0x3d, 0x62, 0xf8, 0xfe, 0xd6, 0x44, 0xf4, 0x10,
+	0x4a, 0x31, 0xf5, 0xc5, 0x76, 0x65, 0xb3, 0xb4, 0x4c, 0xf4, 0x34, 0xc5, 0xe9, 0x83, 0xda, 0x50,
+	0xa6, 0xe1, 0x88, 0xd5, 0xa4, 0x3a, 0x68, 0x56, 0xda, 0x07, 0xad, 0xf5, 0xdd, 0x37, 0x57, 0x33,
+	0xf7, 0x96, 0x89, 0x2e, 0xba, 0xb0, 0x78, 0x1b, 0x1f, 0x00, 0xac, 0xe6, 0x3a, 0x30, 0x09, 0xd8,
+	0xf5, 0x7f, 0x53, 0xf2, 0x19, 0xc0, 0x4a, 0x3f, 0x1e, 0x4e, 0xa9, 0xe7, 0x72, 0xca, 0xc2, 0x7f,
+	0xa0, 0x22, 0x77, 0x82, 0xb4, 0xb5, 0x13, 0xd6, 0xc2, 0xe5, 0x3f, 0x10, 0xfe, 0x16, 0xca, 0x27,
+	0x8c, 0x5d, 0xa1, 0x23, 0x58, 0x24, 0xd7, 0x24, 0xe4, 0x42, 0xae, 0xd2, 0xae, 0x6e, 0xc8, 0x4e,
+	0x0a, 0xe3, 0xac, 0xfa, 0x37, 0xfe, 0xbc, 0x05, 0xb0, 0x74, 0x91, 0x0d, 0x43, 0xca, 0xda, 0xf6,
+	0xfb, 0xc2, 0xee, 0x87, 0xb0, 0xcc, 0x69, 0x40, 0xe6, 0xdc, 0x0d, 0x22, 0x31, 0x53, 0xc2, 0x1b,
+	0x20, 0xad, 0xce, 0xe9, 0x38, 0x74, 0x79, 0x3c, 0x23, 0xe2, 0x0e, 0x65, 0xbc, 0x01, 0x36, 0x8a,
+	0xe5, 0xdf, 0x2a, 0x3e, 0x80, 0x45, 0x37, 0x8a, 0x3a, 0x7e, 0xad, 0x28, 0x06, 0x64, 0x09, 0x52,
+	0xa1, 0x14, 0xcf, 0xa6, 0xb5, 0x5d, 0x81, 0xa5, 0x21, 0x42, 0xab, 0xcd, 0x4a, 0xe9, 0x66, 0x99,
+	0xf4, 0x27, 0x01, 0x2c, 0x3a, 0xab, 0x21, 0xaa, 0x75, 0x62, 0x74, 0xbb, 0xce, 0xe9, 0x65, 0xcf,
+	0xb2, 0xce, 0xfb, 0x1d, 0xc7, 0x56, 0x77, 0xd0, 0x7d, 0x58, 0xcd, 0xd1, 0x81, 0x61, 0x19, 0x67,
+	0x8e, 0xad, 0x02, 0x84, 0xa0, 0xd2, 0xc7, 0xce, 0x1b, 0xa7, 0x6b, 0x39, 0x97, 0x86, 0x6d, 0x3b,
+	0xb6, 0x5a, 0x48, 0xe9, 0x6b, 0x0c, 0x3b, 0xaf, 0x7b, 0x03, 0xc7, 0x56, 0x25, 0x54, 0x85, 0x95,
+	0xfe, 0xb9, 0x79, 0xda, 0xb1, 0x8c, 0xb3, 0x4e, 0xaf, 0xab, 0xca, 0xe6, 0xe1, 0xcf, 0xef, 0x1a,
+	0xf8, 0xb4, 0xd0, 0xc0, 0xed, 0x42, 0x03, 0x77, 0x0b, 0x0d, 0x7c, 0x59, 0x68, 0xe0, 0xdb, 0x42,
+	0x03, 0x1f, 0x7f, 0x68, 0x3b, 0xc3, 0x5d, 0xf1, 0x1f, 0x79, 0xf1, 0x2b, 0x00, 0x00, 0xff, 0xff,
+	0xa9, 0x77, 0x18, 0xaa, 0x92, 0x04, 0x00, 0x00,
 }
 
 func (this *ClientInfo) Equal(that interface{}) bool {
@@ -588,6 +611,9 @@ func (this *ClientInfo) Equal(that interface{}) bool {
 	if !this.Data.Equal(that1.Data) {
 		return false
 	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+		return false
+	}
 	return true
 }
 func (this *ChannelOccupied) Equal(that interface{}) bool {
@@ -612,6 +638,9 @@ func (this *ChannelOccupied) Equal(that interface{}) bool {
 	if this.Channel != that1.Channel {
 		return false
 	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+		return false
+	}
 	return true
 }
 func (this *ChannelVacated) Equal(that interface{}) bool {
@@ -634,6 +663,9 @@ func (this *ChannelVacated) Equal(that interface{}) bool {
 		return false
 	}
 	if this.Channel != that1.Channel {
+		return false
+	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
 		return false
 	}
 	return true
@@ -666,6 +698,9 @@ func (this *PresenceAdded) Equal(that interface{}) bool {
 	if !this.Info.Equal(that1.Info) {
 		return false
 	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+		return false
+	}
 	return true
 }
 func (this *PresenceRemoved) Equal(that interface{}) bool {
@@ -694,6 +729,9 @@ func (this *PresenceRemoved) Equal(that interface{}) bool {
 		return false
 	}
 	if !this.Info.Equal(that1.Info) {
+		return false
+	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
 		return false
 	}
 	return true
@@ -729,6 +767,9 @@ func (this *Publication) Equal(that interface{}) bool {
 	if !this.Info.Equal(that1.Info) {
 		return false
 	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+		return false
+	}
 	return true
 }
 func (this *Hook) Equal(that interface{}) bool {
@@ -754,6 +795,9 @@ func (this *Hook) Equal(that interface{}) bool {
 		return false
 	}
 	if !this.Data.Equal(that1.Data) {
+		return false
+	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
 		return false
 	}
 	return true
@@ -798,6 +842,9 @@ func (this *Webhook) Equal(that interface{}) bool {
 	if !bytes.Equal(this.Data, that1.Data) {
 		return false
 	}
+	if !bytes.Equal(this.XXX_unrecognized, that1.XXX_unrecognized) {
+		return false
+	}
 	return true
 }
 func (m *ClientInfo) Marshal() (dAtA []byte, err error) {
@@ -820,6 +867,10 @@ func (m *ClientInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	{
 		size := m.Data.Size()
 		i -= size
@@ -860,6 +911,10 @@ func (m *ChannelOccupied) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Channel) > 0 {
 		i -= len(m.Channel)
 		copy(dAtA[i:], m.Channel)
@@ -890,6 +945,10 @@ func (m *ChannelVacated) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Channel) > 0 {
 		i -= len(m.Channel)
 		copy(dAtA[i:], m.Channel)
@@ -920,6 +979,10 @@ func (m *PresenceAdded) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Info != nil {
 		{
 			size, err := m.Info.MarshalToSizedBuffer(dAtA[:i])
@@ -969,6 +1032,10 @@ func (m *PresenceRemoved) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Info != nil {
 		{
 			size, err := m.Info.MarshalToSizedBuffer(dAtA[:i])
@@ -1018,6 +1085,10 @@ func (m *Publication) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if m.Info != nil {
 		{
 			size, err := m.Info.MarshalToSizedBuffer(dAtA[:i])
@@ -1077,6 +1148,10 @@ func (m *Hook) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	{
 		size := m.Data.Size()
 		i -= size
@@ -1115,6 +1190,10 @@ func (m *Webhook) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	if len(m.Data) > 0 {
 		i -= len(m.Data)
 		copy(dAtA[i:], m.Data)
@@ -1178,6 +1257,7 @@ func NewPopulatedClientInfo(r randyWebhooks, easy bool) *ClientInfo {
 	v1 := NewPopulatedRaw(r)
 	this.Data = *v1
 	if !easy && r.Intn(10) != 0 {
+		this.XXX_unrecognized = randUnrecognizedWebhooks(r, 3)
 	}
 	return this
 }
@@ -1186,6 +1266,7 @@ func NewPopulatedChannelOccupied(r randyWebhooks, easy bool) *ChannelOccupied {
 	this := &ChannelOccupied{}
 	this.Channel = string(randStringWebhooks(r))
 	if !easy && r.Intn(10) != 0 {
+		this.XXX_unrecognized = randUnrecognizedWebhooks(r, 2)
 	}
 	return this
 }
@@ -1194,6 +1275,7 @@ func NewPopulatedChannelVacated(r randyWebhooks, easy bool) *ChannelVacated {
 	this := &ChannelVacated{}
 	this.Channel = string(randStringWebhooks(r))
 	if !easy && r.Intn(10) != 0 {
+		this.XXX_unrecognized = randUnrecognizedWebhooks(r, 2)
 	}
 	return this
 }
@@ -1206,6 +1288,7 @@ func NewPopulatedPresenceAdded(r randyWebhooks, easy bool) *PresenceAdded {
 		this.Info = NewPopulatedClientInfo(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
+		this.XXX_unrecognized = randUnrecognizedWebhooks(r, 4)
 	}
 	return this
 }
@@ -1218,6 +1301,7 @@ func NewPopulatedPresenceRemoved(r randyWebhooks, easy bool) *PresenceRemoved {
 		this.Info = NewPopulatedClientInfo(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
+		this.XXX_unrecognized = randUnrecognizedWebhooks(r, 4)
 	}
 	return this
 }
@@ -1232,6 +1316,7 @@ func NewPopulatedPublication(r randyWebhooks, easy bool) *Publication {
 		this.Info = NewPopulatedClientInfo(r, easy)
 	}
 	if !easy && r.Intn(10) != 0 {
+		this.XXX_unrecognized = randUnrecognizedWebhooks(r, 5)
 	}
 	return this
 }
@@ -1242,6 +1327,7 @@ func NewPopulatedHook(r randyWebhooks, easy bool) *Hook {
 	v3 := NewPopulatedRaw(r)
 	this.Data = *v3
 	if !easy && r.Intn(10) != 0 {
+		this.XXX_unrecognized = randUnrecognizedWebhooks(r, 3)
 	}
 	return this
 }
@@ -1263,6 +1349,7 @@ func NewPopulatedWebhook(r randyWebhooks, easy bool) *Webhook {
 		this.Data[i] = byte(r.Intn(256))
 	}
 	if !easy && r.Intn(10) != 0 {
+		this.XXX_unrecognized = randUnrecognizedWebhooks(r, 8)
 	}
 	return this
 }
@@ -1351,6 +1438,9 @@ func (m *ClientInfo) Size() (n int) {
 	}
 	l = m.Data.Size()
 	n += 1 + l + sovWebhooks(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1364,6 +1454,9 @@ func (m *ChannelOccupied) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovWebhooks(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1376,6 +1469,9 @@ func (m *ChannelVacated) Size() (n int) {
 	l = len(m.Channel)
 	if l > 0 {
 		n += 1 + l + sovWebhooks(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1398,6 +1494,9 @@ func (m *PresenceAdded) Size() (n int) {
 		l = m.Info.Size()
 		n += 1 + l + sovWebhooks(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1418,6 +1517,9 @@ func (m *PresenceRemoved) Size() (n int) {
 	if m.Info != nil {
 		l = m.Info.Size()
 		n += 1 + l + sovWebhooks(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1442,6 +1544,9 @@ func (m *Publication) Size() (n int) {
 		l = m.Info.Size()
 		n += 1 + l + sovWebhooks(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1456,6 +1561,9 @@ func (m *Hook) Size() (n int) {
 	}
 	l = m.Data.Size()
 	n += 1 + l + sovWebhooks(uint64(l))
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -1489,6 +1597,9 @@ func (m *Webhook) Size() (n int) {
 	l = len(m.Data)
 	if l > 0 {
 		n += 1 + l + sovWebhooks(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -1608,6 +1719,7 @@ func (m *ClientInfo) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1693,6 +1805,7 @@ func (m *ChannelOccupied) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1778,6 +1891,7 @@ func (m *ChannelVacated) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1931,6 +2045,7 @@ func (m *PresenceAdded) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2084,6 +2199,7 @@ func (m *PresenceRemoved) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2270,6 +2386,7 @@ func (m *Publication) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2375,6 +2492,7 @@ func (m *Hook) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -2615,6 +2733,7 @@ func (m *Webhook) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
