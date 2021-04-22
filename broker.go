@@ -648,6 +648,12 @@ func (b *Broker) getShard(channel string) *shard {
 func (s *shard) Run() error {
 
 	go runForever(func() {
+		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting shard health check pipeline"))
+
+		s.runHealthCheckPipeline()
+	})
+
+	go runForever(func() {
 		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting publish pipeline"))
 
 		s.runPublishPipeline()
@@ -656,16 +662,44 @@ func (s *shard) Run() error {
 	go runForever(func() {
 		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting data pipeline"))
 
-		s.RunDataPipeline()
+		s.runDataPipeline()
 	})
 
 	go runForever(func() {
-		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting data pipeline"))
+		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting subcription pipeline"))
 
 		s.runPubSub()
 	})
 
 	return nil
+}
+
+func (s *shard) runHealthCheckPipeline() {
+
+	pingTicker := time.NewTicker(time.Second)
+	defer pingTicker.Stop()
+
+	for {
+		select {
+		case <-pingTicker.C:
+			conn := s.pool.Get()
+			err := conn.Send("PUBLISH", serviceChannelPing, nil)
+			if err != nil {
+				s.node.logger.log(NewLogEntry(LogLevelError, "shard's health check failed", map[string]interface{}{"error": err.Error()}))
+				err := conn.Close()
+				if err != nil {
+					s.node.logger.log(NewLogEntry(LogLevelError, "error closing redis connection", map[string]interface{}{"error": err.Error()}))
+				}
+
+				return
+
+			}
+			err = conn.Close()
+			if err != nil {
+				s.node.logger.log(NewLogEntry(LogLevelError, "error closing redis connection", map[string]interface{}{"error": err.Error()}))
+			}
+		}
+	}
 }
 
 //////////////////////////////////////////////////
@@ -681,22 +715,6 @@ func (s *shard) runPublishPipeline() {
 	// TODO добавить воркеры
 	for {
 		select {
-		case <-pingTicker.C:
-			conn := s.pool.Get()
-			err := conn.Send("PUBLISH", serviceChannelPing, nil)
-			if err != nil {
-				s.node.logger.log(NewLogEntry(LogLevelError, "error publishing to ping channel", map[string]interface{}{"error": err.Error()}))
-				err := conn.Close()
-				if err != nil {
-					s.node.logger.log(NewLogEntry(LogLevelError, "error closing redis connection", map[string]interface{}{"error": err.Error()}))
-				}
-				return
-			}
-			err = conn.Close()
-			if err != nil {
-				s.node.logger.log(NewLogEntry(LogLevelError, "error closing redis connection", map[string]interface{}{"error": err.Error()}))
-			}
-
 		case p := <-s.pubMessages:
 
 			prs = append(prs, p)
@@ -740,6 +758,7 @@ func (s *shard) runPublishPipeline() {
 }
 
 func (s *shard) runPubSub() {
+
 	conn := s.pool.Get()
 	if conn == nil {
 		s.node.logger.log(NewLogEntry(LogLevelError, "error connecting to redis"))
@@ -784,6 +803,7 @@ func (s *shard) runPubSub() {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error closing redis connection", map[string]interface{}{"error": err.Error()}))
 				}
 				return
+
 			case r := <-s.subCh:
 				isSubscribe := r.subscribe
 				channelBatch := []subRequest{r}
@@ -1115,7 +1135,7 @@ func (s *shard) listenCommands(done chan struct{}) {
 //
 // and etc.
 
-func (s *shard) RunDataPipeline() {
+func (s *shard) runDataPipeline() {
 
 	conn := s.pool.Get()
 
