@@ -137,6 +137,9 @@ type shard struct {
 	channelsScript       *redis.Script
 	addChannelScript     *redis.Script
 	remChannelScript     *redis.Script
+
+	isAvailable       bool
+	lastSeenAvailable time.Time
 }
 
 type BrokerShardConfig struct {
@@ -169,6 +172,8 @@ func NewBroker(n *Node, config *BrokerConfig) (*Broker, error) {
 			return nil, err
 		}
 		shards = append(shards, shard)
+
+		n.logger.log(NewLogEntry(LogLevelInfo, "broker shard added", map[string]interface{}{"host": shard.config.Host, "port": shard.config.Port}))
 	}
 
 	return &Broker{
@@ -179,6 +184,7 @@ func NewBroker(n *Node, config *BrokerConfig) (*Broker, error) {
 }
 
 func (b *Broker) Run() error {
+
 	for _, shard := range b.shards {
 		shard.broker = b
 		err := shard.Run()
@@ -186,7 +192,45 @@ func (b *Broker) Run() error {
 			return err
 		}
 	}
+
+	time.Sleep(time.Millisecond * 200)
+
+	go b.runShardsHealthCheck()
+
 	return nil
+}
+
+func (b *Broker) AddShard(shard *shard) error {
+
+	host := shard.config.Host
+	port := shard.config.Port
+
+	for _, sh := range b.shards {
+		if sh.config.Host == host && sh.config.Port == port {
+			return errors.New("shard has already been added")
+		}
+	}
+
+	b.shards = append(b.shards, shard)
+
+	return nil
+}
+
+func (b *Broker) RemoveShard(i int) error {
+
+	if i > len(b.shards) {
+		return errors.New("index out of range")
+	}
+
+	shard := b.shards[i]
+	if shard.isAvailable {
+		return errors.New("cannot remove available shard")
+	}
+
+	b.shards = append(b.shards[:i], b.shards[i+1:]...)
+
+	return nil
+
 }
 
 //////////////////////////////////////////////////
@@ -648,33 +692,25 @@ func (b *Broker) getShard(channel string) *shard {
 func (s *shard) Run() error {
 
 	go runForever(func() {
-		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting shard health check pipeline"))
-
-		s.runHealthCheckPipeline()
+		s.runPingPipeline()
 	})
 
 	go runForever(func() {
-		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting publish pipeline"))
-
 		s.runPublishPipeline()
 	})
 
 	go runForever(func() {
-		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting data pipeline"))
-
 		s.runDataPipeline()
 	})
 
 	go runForever(func() {
-		s.node.logger.log(NewLogEntry(LogLevelInfo, "starting subcription pipeline"))
-
 		s.runPubSub()
 	})
 
 	return nil
 }
 
-func (s *shard) runHealthCheckPipeline() {
+func (s *shard) runPingPipeline() {
 
 	pingTicker := time.NewTicker(time.Second)
 	defer pingTicker.Stop()
@@ -682,6 +718,9 @@ func (s *shard) runHealthCheckPipeline() {
 	for {
 		select {
 		case <-pingTicker.C:
+
+			s.isAvailable = true
+
 			conn := s.pool.Get()
 			err := conn.Send("PUBLISH", serviceChannelPing, nil)
 			if err != nil {
@@ -691,9 +730,14 @@ func (s *shard) runHealthCheckPipeline() {
 					s.node.logger.log(NewLogEntry(LogLevelError, "error closing redis connection", map[string]interface{}{"error": err.Error()}))
 				}
 
+				s.isAvailable = false
+
 				return
 
 			}
+
+			s.lastSeenAvailable = time.Now()
+
 			err = conn.Close()
 			if err != nil {
 				s.node.logger.log(NewLogEntry(LogLevelError, "error closing redis connection", map[string]interface{}{"error": err.Error()}))

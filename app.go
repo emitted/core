@@ -173,6 +173,10 @@ func (app *App) updateStats() error {
 	return nil
 }
 
+func (app *App) getStatsSnapshot() AppStats {
+	return app.stats
+}
+
 func (app *App) clearStats() {
 	err := app.node.ClearAppStats(app.ID)
 	if err != nil {

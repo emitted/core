@@ -126,6 +126,76 @@ func (n *Node) Run() error {
 	return nil
 }
 
+func (n *Node) runStatsUpdate() {
+
+	ticker := time.NewTicker(time.Second * 5)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+
+			stats, err := n.fetchAppsStats()
+			if err != nil {
+
+			}
+
+			println(stats)
+
+		}
+	}
+
+}
+
+func (n *Node) fetchAppsStats() (map[string]AppStats, error) {
+
+	appsStats := make(map[string]AppStats, len(n.hub.apps))
+
+	n.hub.mu.RLock()
+	for appId, app := range n.hub.apps {
+
+		stats := app.getStatsSnapshot()
+
+		appsStats[appId] = stats
+	}
+	n.hub.mu.RUnlock()
+
+	return appsStats, nil
+}
+
+func (b *Broker) runShardsHealthCheck() {
+
+	interval := b.node.config.BrokerShardHealthCheckInterval
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+
+			for i, shard := range b.shards {
+
+				// If 30 seconds since last available timestamp have passed, we remove shard from the list
+				// it is necessary because new clients may be attached to unavailable shard
+
+				timeout := b.node.config.BrokerShardUnavailabilityTimeout
+
+				if (shard.isAvailable == false) && (time.Since(shard.lastSeenAvailable) > timeout) {
+
+					err := b.RemoveShard(i)
+					if err != nil {
+						b.node.logger.log(NewLogEntry(LogLevelError, "error removing unavailable broker shard from the list", map[string]interface{}{"error": err.Error()}))
+					}
+				}
+
+			}
+
+		}
+	}
+
+}
+
 func (n *Node) updateMetrics() {
 	ticker := time.NewTicker(time.Second * 10)
 	for {

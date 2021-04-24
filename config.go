@@ -15,6 +15,9 @@ type Config struct {
 
 	LogLevel   LogLevel
 	LogHandler LogHandler
+
+	BrokerShardUnavailabilityTimeout time.Duration
+	BrokerShardHealthCheckInterval   time.Duration
 }
 
 var DefaultConfig = Config{
