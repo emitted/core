@@ -165,7 +165,8 @@ func (n *Node) fetchAppsStats() (map[string]AppStats, error) {
 
 func (b *Broker) runShardsHealthCheck() {
 
-	interval := b.node.config.BrokerShardHealthCheckInterval
+	//interval := b.node.config.BrokerShardHealthCheckInterval
+	interval := 5 * time.Second
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -179,7 +180,8 @@ func (b *Broker) runShardsHealthCheck() {
 				// If 30 seconds since last available timestamp have passed, we remove shard from the list
 				// it is necessary because new clients may be attached to unavailable shard
 
-				timeout := b.node.config.BrokerShardUnavailabilityTimeout
+				//timeout := b.node.config.BrokerShardUnavailabilityTimeout
+				timeout := 15 * time.Second
 
 				if (shard.isAvailable == false) && (time.Since(shard.lastSeenAvailable) > timeout) {
 
