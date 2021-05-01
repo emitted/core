@@ -47,6 +47,7 @@ func (m *Mongo) executeQuery(s func(*mgo.Collection) error) error {
 func (m *Mongo) Run() error {
 	address := m.config.Address
 
+	m.node.logger.log(NewLogEntry(LogLevelInfo, "connecting to mongodb", map[string]interface{}{"address": address}))
 	session, err := mgo.Dial(address)
 	if err != nil {
 		return err
